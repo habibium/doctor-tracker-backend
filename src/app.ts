@@ -19,7 +19,17 @@ export function createApp(auth: Auth) {
   app.disable("x-powered-by");
   app.set("trust proxy", env.TRUST_PROXY);
 
-  app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === "/health" } }));
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: { ignore: (req) => req.url === "/health" },
+      // Log the request line only: headers carry session cookies.
+      serializers: {
+        req: (req) => ({ method: req.method, url: req.url }),
+        res: (res) => ({ statusCode: res.statusCode }),
+      },
+    }),
+  );
   app.use(cors({ origin: [env.WEB_ORIGIN], credentials: true }));
 
   const openApiDocument = buildOpenApiDocument(routes);

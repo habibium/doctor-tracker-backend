@@ -1,4 +1,5 @@
-const WORD = /[\p{L}\p{N}]+/gu;
+// \p{M} keeps combining marks, so Bangla vowel signs do not split a word.
+const WORD = /[\p{L}\p{M}\p{N}]+/gu;
 const MAX_QUERY_TERMS = 5;
 
 /** Lowercase word tokens, stored in an indexed array so search can prefix-match any word. */
@@ -24,6 +25,6 @@ export function phoneTokens(phone: string | undefined): string[] {
 export function searchFilter(search: string | undefined) {
   const terms = tokenize(search).slice(0, MAX_QUERY_TERMS);
   if (terms.length === 0) return {};
-  // Tokens contain only letters and digits, so they need no regex escaping.
+  // Tokens contain only letters, marks and digits, so they need no regex escaping.
   return { $and: terms.map((term) => ({ searchTokens: { $regex: `^${term}` } })) };
 }

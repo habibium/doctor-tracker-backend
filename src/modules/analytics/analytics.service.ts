@@ -7,6 +7,15 @@ import type { Range } from "./analytics.schema.ts";
 const DAY_MS = 86_400_000;
 const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, "12m": 365 };
 
+/**
+ * Sorting by an indexed field before $group lets MongoDB answer from the index alone
+ * (a covered scan, zero documents read) instead of scanning the whole collection.
+ */
+const INDEX_ORDER = {
+  doctor: { $sort: { doctor: 1 } },
+  condition: { $sort: { condition: 1 } },
+} satisfies Record<string, PipelineStage>;
+
 const AGE_BOUNDARIES = [0, 13, 18, 31, 46, 61] as const;
 const AGE_LABELS = ["0-12", "13-17", "18-30", "31-45", "46-60", "61+"];
 
@@ -113,6 +122,7 @@ export async function getPatientsPerDoctor(limit: number) {
     patients: number;
     doctor: { name: string; specialization: string; hospital: string };
   }>([
+    INDEX_ORDER.doctor,
     { $group: { _id: "$doctor", patients: { $sum: 1 } } },
     { $sort: { patients: -1, _id: 1 } },
     { $limit: limit },
@@ -140,6 +150,7 @@ export async function getPatientsPerDoctor(limit: number) {
 
 export async function getConditionBreakdown() {
   const rows = await Patient.aggregate<{ _id: string; patients: number }>([
+    INDEX_ORDER.condition,
     { $group: { _id: "$condition", patients: { $sum: 1 } } },
   ]);
   const counts = new Map(rows.map((row) => [row._id, row.patients]));
@@ -154,6 +165,7 @@ export async function getSpecializationBreakdown() {
   const [doctors, patients] = await Promise.all([
     Doctor.aggregate<Row>([{ $group: { _id: "$specialization", count: { $sum: 1 } } }]),
     Patient.aggregate<Row>([
+      INDEX_ORDER.doctor,
       // Collapse to one row per doctor first, so the join runs per doctor, not per patient.
       { $group: { _id: "$doctor", count: { $sum: 1 } } },
       {

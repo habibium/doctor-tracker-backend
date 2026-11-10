@@ -91,8 +91,9 @@ function buildDoctors(now: number) {
         __v: 0,
       },
       specialization,
-      // Squared so a few doctors carry far more patients than the rest.
-      popularity: 0.15 + random() ** 2 * 3,
+      // Squared so a few doctors are far busier than the rest; scaled by tenure so each
+      // doctor's intake rate stays steady and totals grow only as doctors join.
+      popularity: (0.15 + random() ** 2 * 3) * (now - createdAt.getTime()),
     };
   });
 }
@@ -101,9 +102,8 @@ function buildPatients(doctors: ReturnType<typeof buildDoctors>, now: number) {
   return Array.from({ length: PATIENT_COUNT }, () => {
     const { doctor, specialization } = pickWeighted(doctors, (item) => item.popularity);
 
-    // sqrt skews toward the present, so registrations grow over time.
     const earliest = doctor.createdAt.getTime();
-    let createdAt = new Date(earliest + Math.sqrt(random()) * (now - earliest));
+    let createdAt = new Date(earliest + random() * (now - earliest));
     if (isQuietDay(createdAt))
       createdAt = new Date(Math.min(now, createdAt.getTime() + 2 * DAY_MS));
 
@@ -118,7 +118,10 @@ function buildPatients(doctors: ReturnType<typeof buildDoctors>, now: number) {
 
     const fields = {
       name: `${pick(gender === "male" ? MALE_NAMES : FEMALE_NAMES)} ${pick(FAMILY_NAMES)}`,
-      age: between(...specialization.ageRange),
+      // Averaging two rolls clusters ages around the middle of the range.
+      age: Math.round(
+        (between(...specialization.ageRange) + between(...specialization.ageRange)) / 2,
+      ),
       gender,
       phone: phone(),
       condition: pickWeighted(PATIENT_CONDITIONS, (item) => CONDITION_WEIGHTS[item]),

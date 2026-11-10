@@ -1,0 +1,2196 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Doctor Tracker API",
+    "version": "1.0.0",
+    "description": "Manage doctors and their patients, and read dashboard analytics. Every endpoint needs a session cookie: sign in through `POST /api/auth/sign-in/email`. Endpoints that change data need the `admin` role."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "paths": {
+    "/api/v1/doctors": {
+      "get": {
+        "operationId": "listDoctors",
+        "summary": "List doctors with search, filters and pagination",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "description": "Matches the start of any word; several words must all match",
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Matches the start of any word; several words must all match"
+          },
+          {
+            "in": "query",
+            "name": "specialization",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "hospital",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "description": "Created on or after this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "description": "Created on or before this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or before this date"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "-createdAt",
+              "type": "string",
+              "enum": [
+                "-createdAt",
+                "createdAt",
+                "name",
+                "-name"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of doctors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDoctor",
+        "summary": "Create a doctor",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDoctor"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created doctor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with existing data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/doctors/filters": {
+      "get": {
+        "operationId": "getDoctorFilters",
+        "summary": "Distinct specializations and hospitals for filter controls",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Available filter values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorFilters"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/doctors/{id}": {
+      "get": {
+        "operationId": "getDoctor",
+        "summary": "Get a doctor",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The doctor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateDoctor",
+        "summary": "Update a doctor",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDoctor"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated doctor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with existing data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDoctor",
+        "summary": "Delete a doctor who has no patients",
+        "tags": [
+          "Doctors"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Doctor deleted"
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with existing data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/doctors/{id}/patients": {
+      "get": {
+        "operationId": "listDoctorPatients",
+        "summary": "List a doctor's patients",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "description": "Matches the start of any word; several words must all match",
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Matches the start of any word; several words must all match"
+          },
+          {
+            "in": "query",
+            "name": "condition",
+            "schema": {
+              "$ref": "#/components/schemas/PatientCondition"
+            }
+          },
+          {
+            "in": "query",
+            "name": "gender",
+            "schema": {
+              "$ref": "#/components/schemas/Gender"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "description": "Created on or after this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "description": "Created on or before this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or before this date"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "-createdAt",
+              "type": "string",
+              "enum": [
+                "-createdAt",
+                "createdAt",
+                "name",
+                "-name"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the doctor's patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDoctorPatient",
+        "summary": "Add a patient to a doctor",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDoctorPatient"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created patient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/doctors/{id}/patients/{patientId}": {
+      "delete": {
+        "operationId": "deleteDoctorPatient",
+        "summary": "Remove a patient from a doctor's list",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "patientId",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Patient deleted"
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/patients": {
+      "get": {
+        "operationId": "listPatients",
+        "summary": "List patients with search, filters and pagination",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "description": "Matches the start of any word; several words must all match",
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Matches the start of any word; several words must all match"
+          },
+          {
+            "in": "query",
+            "name": "condition",
+            "schema": {
+              "$ref": "#/components/schemas/PatientCondition"
+            }
+          },
+          {
+            "in": "query",
+            "name": "gender",
+            "schema": {
+              "$ref": "#/components/schemas/Gender"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "description": "Created on or after this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or after this date"
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "description": "Created on or before this date",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ]
+            },
+            "description": "Created on or before this date"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "-createdAt",
+              "type": "string",
+              "enum": [
+                "-createdAt",
+                "createdAt",
+                "name",
+                "-name"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "doctorId",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPatient",
+        "summary": "Create a patient under a doctor",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePatient"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created patient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/patients/{id}": {
+      "get": {
+        "operationId": "getPatient",
+        "summary": "Get a patient",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The patient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePatient",
+        "summary": "Update a patient or move them to another doctor",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePatient"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated patient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Patient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePatient",
+        "summary": "Delete a patient",
+        "tags": [
+          "Patients"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Patient deleted"
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in, but not allowed to do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/summary": {
+      "get": {
+        "operationId": "getAnalyticsSummary",
+        "summary": "Headline totals and growth for the dashboard",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "description": "Reporting window ending now",
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "12m"
+              ]
+            },
+            "description": "Reporting window ending now"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/registrations": {
+      "get": {
+        "operationId": "getRegistrations",
+        "summary": "Patients and doctors added per day or month",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "description": "Reporting window ending now",
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "12m"
+              ]
+            },
+            "description": "Reporting window ending now"
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "schema": {
+              "default": "UTC",
+              "description": "Time zone used to group records into days and months",
+              "type": "string"
+            },
+            "description": "Time zone used to group records into days and months"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A gap-free time series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registrations"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/patients-per-doctor": {
+      "get": {
+        "operationId": "getPatientsPerDoctor",
+        "summary": "Doctors with the most patients",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top doctors by patient count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientsPerDoctor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/conditions": {
+      "get": {
+        "operationId": "getConditionBreakdown",
+        "summary": "Patients by condition",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Patient count per condition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConditionBreakdown"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/specializations": {
+      "get": {
+        "operationId": "getSpecializationBreakdown",
+        "summary": "Doctors and patients by specialization",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Doctor and patient counts per specialization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecializationBreakdown"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/demographics": {
+      "get": {
+        "operationId": "getDemographics",
+        "summary": "Patients by gender and age group",
+        "tags": [
+          "Analytics"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Gender and age distribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Demographics"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateDoctor": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "specialization": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "hospital": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "name",
+          "specialization",
+          "hospital",
+          "phone",
+          "email"
+        ]
+      },
+      "UpdateDoctor": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "specialization": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "hospital": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        }
+      },
+      "PatientCondition": {
+        "type": "string",
+        "enum": [
+          "stable",
+          "recovering",
+          "under_observation",
+          "critical"
+        ]
+      },
+      "Gender": {
+        "type": "string",
+        "enum": [
+          "male",
+          "female",
+          "other"
+        ]
+      },
+      "CreateDoctorPatient": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 130
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/PatientCondition"
+          },
+          "diagnosis": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "name",
+          "age",
+          "gender",
+          "phone",
+          "condition",
+          "diagnosis"
+        ]
+      },
+      "CreatePatient": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 130
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/PatientCondition"
+          },
+          "diagnosis": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "doctorId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          }
+        },
+        "required": [
+          "name",
+          "age",
+          "gender",
+          "phone",
+          "condition",
+          "diagnosis",
+          "doctorId"
+        ]
+      },
+      "UpdatePatient": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 130
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/PatientCondition"
+          },
+          "diagnosis": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "doctorId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          }
+        }
+      },
+      "DoctorList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Doctor"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "Doctor": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "specialization": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "hospital": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "patientCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "specialization",
+          "hospital",
+          "phone",
+          "email",
+          "id",
+          "patientCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "DoctorFilters": {
+        "type": "object",
+        "properties": {
+          "specializations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hospitals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "specializations",
+          "hospitals"
+        ],
+        "additionalProperties": false
+      },
+      "PatientList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Patient"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "Patient": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 130
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9][0-9\\s-]{6,18}$"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/PatientCondition"
+          },
+          "diagnosis": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "doctor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatientDoctor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "age",
+          "gender",
+          "phone",
+          "condition",
+          "diagnosis",
+          "id",
+          "doctor",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "PatientDoctor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "specialization": {
+            "type": "string"
+          },
+          "hospital": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "specialization",
+          "hospital"
+        ],
+        "additionalProperties": false
+      },
+      "AnalyticsSummary": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d",
+              "12m"
+            ]
+          },
+          "totalDoctors": {
+            "type": "integer"
+          },
+          "totalPatients": {
+            "type": "integer"
+          },
+          "averagePatientsPerDoctor": {
+            "type": "number"
+          },
+          "criticalPatients": {
+            "type": "integer"
+          },
+          "newDoctors": {
+            "type": "integer"
+          },
+          "newPatients": {
+            "type": "integer"
+          },
+          "previousNewPatients": {
+            "type": "integer",
+            "description": "New patients in the preceding window of the same length"
+          }
+        },
+        "required": [
+          "range",
+          "totalDoctors",
+          "totalPatients",
+          "averagePatientsPerDoctor",
+          "criticalPatients",
+          "newDoctors",
+          "newPatients",
+          "previousNewPatients"
+        ],
+        "additionalProperties": false
+      },
+      "Registrations": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d",
+              "12m"
+            ]
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD for days, YYYY-MM for months"
+                },
+                "patients": {
+                  "type": "integer"
+                },
+                "doctors": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "date",
+                "patients",
+                "doctors"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "range",
+          "interval",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "PatientsPerDoctor": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "doctorId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "specialization": {
+              "type": "string"
+            },
+            "hospital": {
+              "type": "string"
+            },
+            "patients": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "doctorId",
+            "name",
+            "specialization",
+            "hospital",
+            "patients"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "ConditionBreakdown": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "condition": {
+              "$ref": "#/components/schemas/PatientCondition"
+            },
+            "patients": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "condition",
+            "patients"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "SpecializationBreakdown": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "specialization": {
+              "type": "string"
+            },
+            "doctors": {
+              "type": "integer"
+            },
+            "patients": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "specialization",
+            "doctors",
+            "patients"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "Demographics": {
+        "type": "object",
+        "properties": {
+          "genders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gender": {
+                  "$ref": "#/components/schemas/Gender"
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "gender",
+                "patients"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ageGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "group",
+                "patients"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "genders",
+          "ageGroups"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "better-auth.session_token",
+        "description": "Set by the sign-in endpoint. Named `__Secure-better-auth.session_token` over HTTPS."
+      }
+    }
+  }
+}
