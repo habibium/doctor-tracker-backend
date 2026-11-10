@@ -1,0 +1,115 @@
+import { defineRoute } from "../../lib/route.ts";
+import { idParams } from "../../lib/schemas.ts";
+import {
+  createDoctorPatientBody,
+  createPatientBody,
+  doctorPatientParams,
+  listDoctorPatientsQuery,
+  listPatientsQuery,
+  patient,
+  patientList,
+  updatePatientBody,
+} from "./patient.schema.ts";
+import * as patients from "./patient.service.ts";
+
+const tag = "Patients";
+
+export const patientRoutes = [
+  defineRoute({
+    method: "get",
+    path: "/patients",
+    operationId: "listPatients",
+    summary: "List patients with search, filters and pagination",
+    tag,
+    request: { query: listPatientsQuery },
+    response: { status: 200, description: "A page of patients", schema: patientList },
+    errors: [400],
+    handler: ({ query }) => patients.listPatients(query),
+  }),
+  defineRoute({
+    method: "post",
+    path: "/patients",
+    operationId: "createPatient",
+    summary: "Create a patient under a doctor",
+    tag,
+    roles: ["admin"],
+    request: { body: createPatientBody },
+    response: { status: 201, description: "The created patient", schema: patient },
+    errors: [400, 404],
+    handler: ({ body: { doctorId, ...fields } }) => patients.createPatient(doctorId, fields),
+  }),
+  defineRoute({
+    method: "get",
+    path: "/patients/{id}",
+    operationId: "getPatient",
+    summary: "Get a patient",
+    tag,
+    request: { params: idParams },
+    response: { status: 200, description: "The patient", schema: patient },
+    errors: [400, 404],
+    handler: ({ params }) => patients.getPatient(params.id),
+  }),
+  defineRoute({
+    method: "patch",
+    path: "/patients/{id}",
+    operationId: "updatePatient",
+    summary: "Update a patient or move them to another doctor",
+    tag,
+    roles: ["admin"],
+    request: { params: idParams, body: updatePatientBody },
+    response: { status: 200, description: "The updated patient", schema: patient },
+    errors: [400, 404],
+    handler: ({ params, body }) => patients.updatePatient(params.id, body),
+  }),
+  defineRoute({
+    method: "delete",
+    path: "/patients/{id}",
+    operationId: "deletePatient",
+    summary: "Delete a patient",
+    tag,
+    roles: ["admin"],
+    request: { params: idParams },
+    response: { status: 204, description: "Patient deleted" },
+    errors: [400, 404],
+    handler: ({ params }) => patients.deletePatient(params.id),
+  }),
+];
+
+/** Patients scoped to one doctor, for the doctor detail page. */
+export const doctorPatientRoutes = [
+  defineRoute({
+    method: "get",
+    path: "/doctors/{id}/patients",
+    operationId: "listDoctorPatients",
+    summary: "List a doctor's patients",
+    tag,
+    request: { params: idParams, query: listDoctorPatientsQuery },
+    response: { status: 200, description: "A page of the doctor's patients", schema: patientList },
+    errors: [400, 404],
+    handler: ({ params, query }) => patients.listDoctorPatients(params.id, query),
+  }),
+  defineRoute({
+    method: "post",
+    path: "/doctors/{id}/patients",
+    operationId: "createDoctorPatient",
+    summary: "Add a patient to a doctor",
+    tag,
+    roles: ["admin"],
+    request: { params: idParams, body: createDoctorPatientBody },
+    response: { status: 201, description: "The created patient", schema: patient },
+    errors: [400, 404],
+    handler: ({ params, body }) => patients.createPatient(params.id, body),
+  }),
+  defineRoute({
+    method: "delete",
+    path: "/doctors/{id}/patients/{patientId}",
+    operationId: "deleteDoctorPatient",
+    summary: "Remove a patient from a doctor's list",
+    tag,
+    roles: ["admin"],
+    request: { params: doctorPatientParams },
+    response: { status: 204, description: "Patient deleted" },
+    errors: [400, 404],
+    handler: ({ params }) => patients.deleteDoctorPatient(params.id, params.patientId),
+  }),
+];
