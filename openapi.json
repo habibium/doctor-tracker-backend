@@ -20,9 +20,7 @@
       "get": {
         "operationId": "listDoctors",
         "summary": "List doctors with search, filters and pagination",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [
           {
             "in": "query",
@@ -111,12 +109,7 @@
             "schema": {
               "default": "-createdAt",
               "type": "string",
-              "enum": [
-                "-createdAt",
-                "createdAt",
-                "name",
-                "-name"
-              ]
+              "enum": ["-createdAt", "createdAt", "name", "-name"]
             }
           }
         ],
@@ -156,9 +149,7 @@
       "post": {
         "operationId": "createDoctor",
         "summary": "Create a doctor",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -228,9 +219,7 @@
       "get": {
         "operationId": "getDoctorFilters",
         "summary": "Distinct specializations and hospitals for filter controls",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [],
         "responses": {
           "200": {
@@ -260,9 +249,7 @@
       "get": {
         "operationId": "getDoctor",
         "summary": "Get a doctor",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [
           {
             "in": "path",
@@ -320,9 +307,7 @@
       "patch": {
         "operationId": "updateDoctor",
         "summary": "Update a doctor",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [
           {
             "in": "path",
@@ -410,9 +395,7 @@
       "delete": {
         "operationId": "deleteDoctor",
         "summary": "Delete a doctor who has no patients",
-        "tags": [
-          "Doctors"
-        ],
+        "tags": ["Doctors"],
         "parameters": [
           {
             "in": "path",
@@ -485,9 +468,7 @@
       "get": {
         "operationId": "listDoctorPatients",
         "summary": "List a doctor's patients",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -583,12 +564,7 @@
             "schema": {
               "default": "-createdAt",
               "type": "string",
-              "enum": [
-                "-createdAt",
-                "createdAt",
-                "name",
-                "-name"
-              ]
+              "enum": ["-createdAt", "createdAt", "name", "-name"]
             }
           }
         ],
@@ -638,9 +614,7 @@
       "post": {
         "operationId": "createDoctorPatient",
         "summary": "Add a patient to a doctor",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -720,9 +694,7 @@
       "delete": {
         "operationId": "deleteDoctorPatient",
         "summary": "Remove a patient from a doctor's list",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -794,9 +766,7 @@
       "get": {
         "operationId": "listPatients",
         "summary": "List patients with search, filters and pagination",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "query",
@@ -883,12 +853,7 @@
             "schema": {
               "default": "-createdAt",
               "type": "string",
-              "enum": [
-                "-createdAt",
-                "createdAt",
-                "name",
-                "-name"
-              ]
+              "enum": ["-createdAt", "createdAt", "name", "-name"]
             }
           },
           {
@@ -936,9 +901,7 @@
       "post": {
         "operationId": "createPatient",
         "summary": "Create a patient under a doctor",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -1008,9 +971,7 @@
       "get": {
         "operationId": "getPatient",
         "summary": "Get a patient",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -1068,9 +1029,7 @@
       "patch": {
         "operationId": "updatePatient",
         "summary": "Update a patient or move them to another doctor",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -1148,9 +1107,7 @@
       "delete": {
         "operationId": "deletePatient",
         "summary": "Delete a patient",
-        "tags": [
-          "Patients"
-        ],
+        "tags": ["Patients"],
         "parameters": [
           {
             "in": "path",
@@ -1213,9 +1170,7 @@
       "get": {
         "operationId": "getAnalyticsSummary",
         "summary": "Headline totals and growth for the dashboard",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [
           {
             "in": "query",
@@ -1224,12 +1179,7 @@
               "default": "30d",
               "description": "Reporting window ending now",
               "type": "string",
-              "enum": [
-                "7d",
-                "30d",
-                "90d",
-                "12m"
-              ]
+              "enum": ["7d", "30d", "90d", "12m"]
             },
             "description": "Reporting window ending now"
           }
@@ -1272,9 +1222,7 @@
       "get": {
         "operationId": "getRegistrations",
         "summary": "Patients and doctors added per day or month",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [
           {
             "in": "query",
@@ -1283,12 +1231,7 @@
               "default": "30d",
               "description": "Reporting window ending now",
               "type": "string",
-              "enum": [
-                "7d",
-                "30d",
-                "90d",
-                "12m"
-              ]
+              "enum": ["7d", "30d", "90d", "12m"]
             },
             "description": "Reporting window ending now"
           },
@@ -1341,9 +1284,7 @@
       "get": {
         "operationId": "getPatientsPerDoctor",
         "summary": "Doctors with the most patients",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [
           {
             "in": "query",
@@ -1394,9 +1335,7 @@
       "get": {
         "operationId": "getConditionBreakdown",
         "summary": "Patients by condition",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [],
         "responses": {
           "200": {
@@ -1426,9 +1365,7 @@
       "get": {
         "operationId": "getSpecializationBreakdown",
         "summary": "Doctors and patients by specialization",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [],
         "responses": {
           "200": {
@@ -1458,9 +1395,7 @@
       "get": {
         "operationId": "getDemographics",
         "summary": "Patients by gender and age group",
-        "tags": [
-          "Analytics"
-        ],
+        "tags": ["Analytics"],
         "parameters": [],
         "responses": {
           "200": {
@@ -1518,13 +1453,7 @@
             "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           }
         },
-        "required": [
-          "name",
-          "specialization",
-          "hospital",
-          "phone",
-          "email"
-        ]
+        "required": ["name", "specialization", "hospital", "phone", "email"]
       },
       "UpdateDoctor": {
         "type": "object",
@@ -1558,20 +1487,11 @@
       },
       "PatientCondition": {
         "type": "string",
-        "enum": [
-          "stable",
-          "recovering",
-          "under_observation",
-          "critical"
-        ]
+        "enum": ["stable", "recovering", "under_observation", "critical"]
       },
       "Gender": {
         "type": "string",
-        "enum": [
-          "male",
-          "female",
-          "other"
-        ]
+        "enum": ["male", "female", "other"]
       },
       "CreateDoctorPatient": {
         "type": "object",
@@ -1602,14 +1522,7 @@
             "maxLength": 200
           }
         },
-        "required": [
-          "name",
-          "age",
-          "gender",
-          "phone",
-          "condition",
-          "diagnosis"
-        ]
+        "required": ["name", "age", "gender", "phone", "condition", "diagnosis"]
       },
       "CreatePatient": {
         "type": "object",
@@ -1644,15 +1557,7 @@
             "pattern": "^[0-9a-fA-F]{24}$"
           }
         },
-        "required": [
-          "name",
-          "age",
-          "gender",
-          "phone",
-          "condition",
-          "diagnosis",
-          "doctorId"
-        ]
+        "required": ["name", "age", "gender", "phone", "condition", "diagnosis", "doctorId"]
       },
       "UpdatePatient": {
         "type": "object",
@@ -1701,10 +1606,7 @@
             "$ref": "#/components/schemas/PaginationMeta"
           }
         },
-        "required": [
-          "data",
-          "meta"
-        ],
+        "required": ["data", "meta"],
         "additionalProperties": false
       },
       "Doctor": {
@@ -1780,12 +1682,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "page",
-          "limit",
-          "total",
-          "totalPages"
-        ],
+        "required": ["page", "limit", "total", "totalPages"],
         "additionalProperties": false
       },
       "ErrorResponse": {
@@ -1812,24 +1709,16 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "path",
-                    "message"
-                  ],
+                  "required": ["path", "message"],
                   "additionalProperties": false
                 }
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "additionalProperties": false
           }
         },
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "additionalProperties": false
       },
       "DoctorFilters": {
@@ -1848,10 +1737,7 @@
             }
           }
         },
-        "required": [
-          "specializations",
-          "hospitals"
-        ],
+        "required": ["specializations", "hospitals"],
         "additionalProperties": false
       },
       "PatientList": {
@@ -1867,10 +1753,7 @@
             "$ref": "#/components/schemas/PaginationMeta"
           }
         },
-        "required": [
-          "data",
-          "meta"
-        ],
+        "required": ["data", "meta"],
         "additionalProperties": false
       },
       "Patient": {
@@ -1955,12 +1838,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name",
-          "specialization",
-          "hospital"
-        ],
+        "required": ["id", "name", "specialization", "hospital"],
         "additionalProperties": false
       },
       "AnalyticsSummary": {
@@ -1968,12 +1846,7 @@
         "properties": {
           "range": {
             "type": "string",
-            "enum": [
-              "7d",
-              "30d",
-              "90d",
-              "12m"
-            ]
+            "enum": ["7d", "30d", "90d", "12m"]
           },
           "totalDoctors": {
             "type": "integer"
@@ -2015,19 +1888,11 @@
         "properties": {
           "range": {
             "type": "string",
-            "enum": [
-              "7d",
-              "30d",
-              "90d",
-              "12m"
-            ]
+            "enum": ["7d", "30d", "90d", "12m"]
           },
           "interval": {
             "type": "string",
-            "enum": [
-              "day",
-              "month"
-            ]
+            "enum": ["day", "month"]
           },
           "points": {
             "type": "array",
@@ -2045,20 +1910,12 @@
                   "type": "integer"
                 }
               },
-              "required": [
-                "date",
-                "patients",
-                "doctors"
-              ],
+              "required": ["date", "patients", "doctors"],
               "additionalProperties": false
             }
           }
         },
-        "required": [
-          "range",
-          "interval",
-          "points"
-        ],
+        "required": ["range", "interval", "points"],
         "additionalProperties": false
       },
       "PatientsPerDoctor": {
@@ -2083,13 +1940,7 @@
               "type": "integer"
             }
           },
-          "required": [
-            "doctorId",
-            "name",
-            "specialization",
-            "hospital",
-            "patients"
-          ],
+          "required": ["doctorId", "name", "specialization", "hospital", "patients"],
           "additionalProperties": false
         }
       },
@@ -2105,10 +1956,7 @@
               "type": "integer"
             }
           },
-          "required": [
-            "condition",
-            "patients"
-          ],
+          "required": ["condition", "patients"],
           "additionalProperties": false
         }
       },
@@ -2127,11 +1975,7 @@
               "type": "integer"
             }
           },
-          "required": [
-            "specialization",
-            "doctors",
-            "patients"
-          ],
+          "required": ["specialization", "doctors", "patients"],
           "additionalProperties": false
         }
       },
@@ -2150,10 +1994,7 @@
                   "type": "integer"
                 }
               },
-              "required": [
-                "gender",
-                "patients"
-              ],
+              "required": ["gender", "patients"],
               "additionalProperties": false
             }
           },
@@ -2169,18 +2010,12 @@
                   "type": "integer"
                 }
               },
-              "required": [
-                "group",
-                "patients"
-              ],
+              "required": ["group", "patients"],
               "additionalProperties": false
             }
           }
         },
-        "required": [
-          "genders",
-          "ageGroups"
-        ],
+        "required": ["genders", "ageGroups"],
         "additionalProperties": false
       }
     },

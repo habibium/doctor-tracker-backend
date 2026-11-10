@@ -149,13 +149,24 @@ async function ensureAccount(name: string, email: string, password: string, role
   if (!(await users.findOne({ email }))) {
     await auth.api.signUpEmail({ body: { name, email, password } });
   }
-  await users.updateOne({ email }, { $set: { role } });
+  // Also refreshes the name, so re-running the seed renames existing demo accounts.
+  await users.updateOne({ email }, { $set: { role, name } });
   console.log(`  ${role.padEnd(6)} ${email}`);
 }
 
 console.log("Accounts");
-await ensureAccount("Admin", accounts.SEED_ADMIN_EMAIL, accounts.SEED_ADMIN_PASSWORD, "admin");
-await ensureAccount("Viewer", accounts.SEED_VIEWER_EMAIL, accounts.SEED_VIEWER_PASSWORD, "viewer");
+await ensureAccount(
+  "Nadia Rahman",
+  accounts.SEED_ADMIN_EMAIL,
+  accounts.SEED_ADMIN_PASSWORD,
+  "admin",
+);
+await ensureAccount(
+  "Tareq Hasan",
+  accounts.SEED_VIEWER_EMAIL,
+  accounts.SEED_VIEWER_PASSWORD,
+  "viewer",
+);
 
 await ensureIndexes();
 
