@@ -6,3 +6,6 @@ coverage
 !.env.example
 *.log
 .DS_Store
+
+# Local credential files, e.g. atlas-credentials.env
+*.env
