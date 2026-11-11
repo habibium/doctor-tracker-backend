@@ -108,9 +108,22 @@
             "name": "sort",
             "schema": {
               "default": "-createdAt",
+              "description": "A leading `-` sorts descending",
               "type": "string",
-              "enum": ["-createdAt", "createdAt", "name", "-name"]
-            }
+              "enum": [
+                "createdAt",
+                "-createdAt",
+                "name",
+                "-name",
+                "specialization",
+                "-specialization",
+                "hospital",
+                "-hospital",
+                "patientCount",
+                "-patientCount"
+              ]
+            },
+            "description": "A leading `-` sorts descending"
           }
         ],
         "responses": {
@@ -563,9 +576,20 @@
             "name": "sort",
             "schema": {
               "default": "-createdAt",
+              "description": "A leading `-` sorts descending. `condition` sorts by severity, so `-condition` lists critical first",
               "type": "string",
-              "enum": ["-createdAt", "createdAt", "name", "-name"]
-            }
+              "enum": [
+                "createdAt",
+                "-createdAt",
+                "name",
+                "-name",
+                "age",
+                "-age",
+                "condition",
+                "-condition"
+              ]
+            },
+            "description": "A leading `-` sorts descending. `condition` sorts by severity, so `-condition` lists critical first"
           }
         ],
         "responses": {
@@ -852,9 +876,20 @@
             "name": "sort",
             "schema": {
               "default": "-createdAt",
+              "description": "A leading `-` sorts descending. `condition` sorts by severity, so `-condition` lists critical first",
               "type": "string",
-              "enum": ["-createdAt", "createdAt", "name", "-name"]
-            }
+              "enum": [
+                "createdAt",
+                "-createdAt",
+                "name",
+                "-name",
+                "age",
+                "-age",
+                "condition",
+                "-condition"
+              ]
+            },
+            "description": "A leading `-` sorts descending. `condition` sorts by severity, so `-condition` lists critical first"
           },
           {
             "in": "query",
@@ -1237,6 +1272,17 @@
           },
           {
             "in": "query",
+            "name": "interval",
+            "schema": {
+              "default": "auto",
+              "description": "`auto` groups 12m by month and shorter ranges by day",
+              "type": "string",
+              "enum": ["auto", "day", "month"]
+            },
+            "description": "`auto` groups 12m by month and shorter ranges by day"
+          },
+          {
+            "in": "query",
             "name": "timezone",
             "schema": {
               "default": "UTC",
@@ -1280,6 +1326,68 @@
         }
       }
     },
+    "/api/v1/analytics/intake-hours": {
+      "get": {
+        "operationId": "getIntakeHours",
+        "summary": "Patient registrations by weekday and hour",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "90d",
+              "description": "Reporting window ending now",
+              "type": "string",
+              "enum": ["7d", "30d", "90d", "12m"]
+            },
+            "description": "Reporting window ending now"
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "schema": {
+              "default": "UTC",
+              "description": "Time zone used to read each registration's weekday and hour",
+              "type": "string"
+            },
+            "description": "Time zone used to read each registration's weekday and hour"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A complete weekday by hour grid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeHours"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/patients-per-doctor": {
       "get": {
         "operationId": "getPatientsPerDoctor",
@@ -1295,6 +1403,15 @@
               "minimum": 1,
               "maximum": 25
             }
+          },
+          {
+            "in": "query",
+            "name": "condition",
+            "schema": {
+              "description": "Rank by patients in this condition only",
+              "$ref": "#/components/schemas/PatientCondition"
+            },
+            "description": "Rank by patients in this condition only"
           }
         ],
         "responses": {
@@ -1361,6 +1478,56 @@
         }
       }
     },
+    "/api/v1/analytics/condition-mix": {
+      "get": {
+        "operationId": "getConditionMix",
+        "summary": "Patients in each condition per specialization or hospital",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "by",
+            "schema": {
+              "default": "specialization",
+              "type": "string",
+              "enum": ["specialization", "hospital"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One row per specialization or hospital, most patients first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConditionMix"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/specializations": {
       "get": {
         "operationId": "getSpecializationBreakdown",
@@ -1374,6 +1541,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SpecializationBreakdown"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/workload": {
+      "get": {
+        "operationId": "getWorkload",
+        "summary": "How patients are spread across doctors",
+        "tags": ["Analytics"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Summary statistics and a histogram of patients per doctor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workload"
                 }
               }
             }
@@ -1410,6 +1607,76 @@
           },
           "401": {
             "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/doctors/{id}/analytics": {
+      "get": {
+        "operationId": "getDoctorAnalytics",
+        "summary": "Condition, intake and demographic breakdown for one doctor",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "schema": {
+              "default": "UTC",
+              "description": "Time zone used to group patients into months",
+              "type": "string"
+            },
+            "description": "Time zone used to group patients into months"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The doctor's analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorAnalytics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request failed validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource does not exist",
             "content": {
               "application/json": {
                 "schema": {
@@ -1644,6 +1911,9 @@
           "patientCount": {
             "type": "integer"
           },
+          "conditionCounts": {
+            "$ref": "#/components/schemas/ConditionCounts"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1661,10 +1931,31 @@
           "email",
           "id",
           "patientCount",
+          "conditionCounts",
           "createdAt",
           "updatedAt"
         ],
         "additionalProperties": false
+      },
+      "ConditionCounts": {
+        "type": "object",
+        "properties": {
+          "stable": {
+            "type": "integer"
+          },
+          "recovering": {
+            "type": "integer"
+          },
+          "under_observation": {
+            "type": "integer"
+          },
+          "critical": {
+            "type": "integer"
+          }
+        },
+        "required": ["stable", "recovering", "under_observation", "critical"],
+        "additionalProperties": false,
+        "description": "Patients in each condition, zeros included"
       },
       "PaginationMeta": {
         "type": "object",
@@ -1918,6 +2209,46 @@
         "required": ["range", "interval", "points"],
         "additionalProperties": false
       },
+      "IntakeHours": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": ["7d", "30d", "90d", "12m"]
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "weekday": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 6,
+                  "description": "0 is Sunday"
+                },
+                "hour": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": ["weekday", "hour", "patients"],
+              "additionalProperties": false
+            },
+            "description": "All 168 cells, Sunday 00:00 first, then by hour"
+          },
+          "max": {
+            "type": "integer",
+            "description": "The largest cell, for scaling a heatmap"
+          }
+        },
+        "required": ["range", "cells", "max"],
+        "additionalProperties": false
+      },
       "PatientsPerDoctor": {
         "type": "array",
         "items": {
@@ -1960,6 +2291,46 @@
           "additionalProperties": false
         }
       },
+      "ConditionMix": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The specialization or hospital"
+            },
+            "doctors": {
+              "type": "integer"
+            },
+            "patients": {
+              "type": "integer"
+            },
+            "stable": {
+              "type": "integer"
+            },
+            "recovering": {
+              "type": "integer"
+            },
+            "under_observation": {
+              "type": "integer"
+            },
+            "critical": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "doctors",
+            "patients",
+            "stable",
+            "recovering",
+            "under_observation",
+            "critical"
+          ],
+          "additionalProperties": false
+        }
+      },
       "SpecializationBreakdown": {
         "type": "array",
         "items": {
@@ -1978,6 +2349,49 @@
           "required": ["specialization", "doctors", "patients"],
           "additionalProperties": false
         }
+      },
+      "Workload": {
+        "type": "object",
+        "properties": {
+          "doctors": {
+            "type": "integer"
+          },
+          "average": {
+            "type": "number"
+          },
+          "median": {
+            "type": "integer"
+          },
+          "p90": {
+            "type": "integer",
+            "description": "Nearest-rank 90th percentile"
+          },
+          "max": {
+            "type": "integer"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "doctors": {
+                  "type": "integer"
+                }
+              },
+              "required": ["min", "max", "doctors"],
+              "additionalProperties": false
+            },
+            "description": "8 to 12 equal-width bins from 0 up to the busiest doctor; bounds inclusive"
+          }
+        },
+        "required": ["doctors", "average", "median", "p90", "max", "buckets"],
+        "additionalProperties": false
       },
       "Demographics": {
         "type": "object",
@@ -2016,6 +2430,66 @@
           }
         },
         "required": ["genders", "ageGroups"],
+        "additionalProperties": false
+      },
+      "DoctorAnalytics": {
+        "type": "object",
+        "properties": {
+          "conditions": {
+            "$ref": "#/components/schemas/ConditionCounts"
+          },
+          "monthly": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "month": {
+                  "type": "string",
+                  "description": "YYYY-MM"
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": ["month", "patients"],
+              "additionalProperties": false
+            },
+            "description": "The last 12 calendar months, oldest first"
+          },
+          "ageGroups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": ["group", "patients"],
+              "additionalProperties": false
+            }
+          },
+          "genders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gender": {
+                  "$ref": "#/components/schemas/Gender"
+                },
+                "patients": {
+                  "type": "integer"
+                }
+              },
+              "required": ["gender", "patients"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["conditions", "monthly", "ageGroups", "genders"],
         "additionalProperties": false
       }
     },
