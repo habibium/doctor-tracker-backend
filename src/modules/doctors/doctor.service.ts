@@ -1,8 +1,8 @@
 import type { ClientSession, Types } from "mongoose";
 import { conflict, notFound } from "../../lib/errors.ts";
-import { countMatching, dateRange, page, SORTS } from "../../lib/query.ts";
+import { countMatching, dateRange, page, sortSpec } from "../../lib/query.ts";
 import { searchFilter } from "../../lib/search.ts";
-import { Doctor, type DoctorAttrs } from "./doctor.model.ts";
+import { Doctor, DOCTOR_SORTS, type DoctorAttrs } from "./doctor.model.ts";
 import type {
   DoctorDto,
   DoctorFields,
@@ -43,7 +43,7 @@ export async function listDoctors(query: ListDoctorsQuery) {
 
   const [docs, total] = await Promise.all([
     Doctor.find(filter)
-      .sort(SORTS[query.sort])
+      .sort(sortSpec(DOCTOR_SORTS, query.sort))
       .skip((query.page - 1) * query.limit)
       .limit(query.limit)
       .lean(),

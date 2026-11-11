@@ -1,6 +1,6 @@
 import type { PipelineStage, Types } from "mongoose";
 import { Doctor } from "../doctors/doctor.model.ts";
-import { Patient } from "../patients/patient.model.ts";
+import { CONDITION_RANK, Patient } from "../patients/patient.model.ts";
 import { GENDERS, PATIENT_CONDITIONS } from "../patients/patient.schema.ts";
 import type { Range } from "./analytics.schema.ts";
 
@@ -13,7 +13,7 @@ const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, "12m"
  */
 const INDEX_ORDER = {
   doctor: { $sort: { doctor: 1 } },
-  condition: { $sort: { condition: 1 } },
+  conditionRank: { $sort: { conditionRank: 1 } },
 } satisfies Record<string, PipelineStage>;
 
 const AGE_BOUNDARIES = [0, 13, 18, 31, 46, 61] as const;
@@ -35,7 +35,7 @@ export async function getSummary(range: Range) {
   ] = await Promise.all([
     Doctor.estimatedDocumentCount(),
     Patient.estimatedDocumentCount(),
-    Patient.countDocuments({ condition: "critical" }),
+    Patient.countDocuments({ conditionRank: CONDITION_RANK.critical }),
     Doctor.countDocuments({ createdAt: { $gte: start } }),
     Patient.countDocuments({ createdAt: { $gte: start } }),
     Patient.countDocuments({ createdAt: { $gte: previousStart, $lt: start } }),
@@ -149,14 +149,14 @@ export async function getPatientsPerDoctor(limit: number) {
 }
 
 export async function getConditionBreakdown() {
-  const rows = await Patient.aggregate<{ _id: string; patients: number }>([
-    INDEX_ORDER.condition,
-    { $group: { _id: "$condition", patients: { $sum: 1 } } },
+  const rows = await Patient.aggregate<{ _id: number; patients: number }>([
+    INDEX_ORDER.conditionRank,
+    { $group: { _id: "$conditionRank", patients: { $sum: 1 } } },
   ]);
   const counts = new Map(rows.map((row) => [row._id, row.patients]));
   return PATIENT_CONDITIONS.map((condition) => ({
     condition,
-    patients: counts.get(condition) ?? 0,
+    patients: counts.get(CONDITION_RANK[condition]) ?? 0,
   }));
 }
 

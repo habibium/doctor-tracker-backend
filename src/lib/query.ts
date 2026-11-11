@@ -19,15 +19,26 @@ export function dateRange(from: string | undefined, to: string | undefined) {
   return range;
 }
 
-/** `_id` breaks ties so offset pages never repeat or skip rows; every list index ends in it. */
-export const SORTS = {
-  "-createdAt": { createdAt: -1, _id: -1 },
-  createdAt: { createdAt: 1, _id: 1 },
-  name: { name: 1, _id: 1 },
-  "-name": { name: -1, _id: -1 },
-} as const;
+export type SortSpec = Record<string, 1 | -1>;
+export type SortParam<F extends string> = F | `-${F}`;
 
-export const SORT_KEYS = ["-createdAt", "createdAt", "name", "-name"] as const;
+/** The values a list's `sort` parameter accepts: each field, then its descending form. */
+export function sortParams<const F extends string>(fields: readonly [F, ...F[]]) {
+  return fields.flatMap((field) => [field, `-${field}` as const]) as [
+    SortParam<F>,
+    ...SortParam<F>[],
+  ];
+}
+
+/**
+ * `-field` is the exact reverse of `field`, so one index serves both directions.
+ * Every spec ends in `_id` so offset pages never repeat or skip rows.
+ */
+export function sortSpec<F extends string>(specs: Record<F, SortSpec>, param: SortParam<F>) {
+  if (!param.startsWith("-")) return specs[param as F];
+  const ascending = Object.entries(specs[param.slice(1) as F]);
+  return Object.fromEntries(ascending.map(([field, order]) => [field, -order])) as SortSpec;
+}
 
 /** Unfiltered totals come from collection metadata instead of a scan. */
 export function countMatching<T>(model: Model<T>, filter: Record<string, unknown>) {

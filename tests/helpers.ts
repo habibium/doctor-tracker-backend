@@ -28,6 +28,24 @@ export const patientInput = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+type PlanNode = Record<string, unknown>;
+
+/** Plan stages of a find or aggregate explain, wherever the server nests them; rejected plans are skipped. */
+export function planNodes(explain: unknown): PlanNode[] {
+  const nodes: PlanNode[] = [];
+  const walk = (value: unknown) => {
+    if (Array.isArray(value)) return value.forEach(walk);
+    if (typeof value !== "object" || value === null) return;
+    const node = value as PlanNode;
+    if (typeof node.stage === "string") nodes.push(node);
+    for (const [key, child] of Object.entries(node)) if (key !== "rejectedPlans") walk(child);
+  };
+  walk(explain);
+  return nodes;
+}
+
+export const planStages = (explain: unknown) => planNodes(explain).map((node) => node.stage);
+
 export async function startTestApp() {
   const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   const connection = await connectDatabase(mongo.getUri("doctor-tracker-test"));

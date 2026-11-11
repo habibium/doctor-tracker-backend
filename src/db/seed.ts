@@ -3,9 +3,9 @@ import * as z from "zod";
 import { createAuth, type Role } from "../auth/auth.ts";
 import { env } from "../config/env.ts";
 import { Doctor, doctorSearchTokens } from "../modules/doctors/doctor.model.ts";
-import { Patient, patientSearchTokens } from "../modules/patients/patient.model.ts";
+import { CONDITION_RANK, Patient, patientSearchTokens } from "../modules/patients/patient.model.ts";
 import { GENDERS, PATIENT_CONDITIONS } from "../modules/patients/patient.schema.ts";
-import { connectDatabase, disconnectDatabase, ensureIndexes } from "./connection.ts";
+import { connectDatabase, disconnectDatabase, syncIndexes } from "./connection.ts";
 import { FAMILY_NAMES, FEMALE_NAMES, HOSPITALS, MALE_NAMES, SPECIALIZATIONS } from "./seed-data.ts";
 
 const DOCTOR_COUNT = 300;
@@ -132,6 +132,7 @@ function buildPatients(doctors: ReturnType<typeof buildDoctors>, now: number) {
       _id: new Types.ObjectId(),
       ...fields,
       doctor: doctor._id,
+      conditionRank: CONDITION_RANK[fields.condition],
       searchTokens: patientSearchTokens(fields),
       createdAt,
       updatedAt: createdAt,
@@ -168,7 +169,7 @@ await ensureAccount(
   "viewer",
 );
 
-await ensureIndexes();
+await syncIndexes();
 
 const fresh = process.argv.includes("--fresh");
 if (!fresh && (await Doctor.estimatedDocumentCount()) > 0) {

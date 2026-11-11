@@ -15,6 +15,11 @@ export async function ensureIndexes() {
   await Promise.all([Doctor.createIndexes(), Patient.createIndexes()]);
 }
 
+/** Also drops indexes the schemas no longer define. For maintenance scripts, not startup. */
+export async function syncIndexes() {
+  await Promise.all([Doctor.syncIndexes(), Patient.syncIndexes()]);
+}
+
 export async function disconnectDatabase() {
   await mongoose.disconnect();
 }

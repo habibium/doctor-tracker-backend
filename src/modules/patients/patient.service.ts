@@ -1,6 +1,6 @@
 import type { Types } from "mongoose";
 import { notFound } from "../../lib/errors.ts";
-import { countMatching, dateRange, page, SORTS } from "../../lib/query.ts";
+import { countMatching, dateRange, page, sortSpec } from "../../lib/query.ts";
 import { searchFilter } from "../../lib/search.ts";
 import { Doctor } from "../doctors/doctor.model.ts";
 import {
@@ -10,7 +10,7 @@ import {
   findDoctorSummary,
   incrementPatientCount,
 } from "../doctors/doctor.service.ts";
-import { Patient, type PatientAttrs } from "./patient.model.ts";
+import { CONDITION_RANK, Patient, PATIENT_SORTS, type PatientAttrs } from "./patient.model.ts";
 import type {
   ListPatientsQuery,
   PatientDto,
@@ -18,7 +18,9 @@ import type {
   UpdatePatientBody,
 } from "./patient.schema.ts";
 
-type PatientRecord = Omit<PatientAttrs, "searchTokens" | "doctor"> & { _id: Types.ObjectId };
+type PatientRecord = Omit<PatientAttrs, "searchTokens" | "conditionRank" | "doctor"> & {
+  _id: Types.ObjectId;
+};
 
 function toDto(doc: PatientRecord, doctor: DoctorSummary | null): PatientDto {
   return {
@@ -45,14 +47,14 @@ export async function listPatients(query: ListPatientsQuery) {
   const filter = {
     ...searchFilter(query.search),
     ...(query.doctorId && { doctor: query.doctorId }),
-    ...(query.condition && { condition: query.condition }),
+    ...(query.condition && { conditionRank: CONDITION_RANK[query.condition] }),
     ...(query.gender && { gender: query.gender }),
     ...(createdAt && { createdAt }),
   };
 
   const [docs, total] = await Promise.all([
     Patient.find(filter)
-      .sort(SORTS[query.sort])
+      .sort(sortSpec(PATIENT_SORTS, query.sort))
       .skip((query.page - 1) * query.limit)
       .limit(query.limit)
       .populate<{ doctor: DoctorSummary | null }>("doctor", DOCTOR_SUMMARY)

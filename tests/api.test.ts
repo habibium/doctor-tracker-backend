@@ -1,10 +1,10 @@
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { SORTS } from "../src/lib/query.ts";
-import { Patient } from "../src/modules/patients/patient.model.ts";
+import { sortSpec } from "../src/lib/query.ts";
+import { CONDITION_RANK, Patient, PATIENT_SORTS } from "../src/modules/patients/patient.model.ts";
 import { buildOpenApiDocument } from "../src/openapi/document.ts";
 import { routes } from "../src/routes.ts";
-import { doctorInput, patientInput, startTestApp, type TestApp } from "./helpers.ts";
+import { doctorInput, patientInput, planStages, startTestApp, type TestApp } from "./helpers.ts";
 
 let ctx: TestApp;
 
@@ -244,18 +244,12 @@ describe("analytics", () => {
 });
 
 describe("query plans", () => {
-  const stagesOf = (plan: Record<string, unknown> | undefined): string[] =>
-    plan ? [String(plan.stage), ...stagesOf(plan.inputStage as Record<string, unknown>)] : [];
-
   it("serves a filtered, sorted page from the index without sorting in memory", async () => {
-    const explained = await Patient.find({ condition: "critical" })
-      .sort(SORTS["-createdAt"])
+    const explained = await Patient.find({ conditionRank: CONDITION_RANK.critical })
+      .sort(sortSpec(PATIENT_SORTS, "-createdAt"))
       .limit(10)
       .explain("queryPlanner");
-    const stages = stagesOf(
-      (explained as unknown as { queryPlanner: { winningPlan: Record<string, unknown> } })
-        .queryPlanner.winningPlan,
-    );
+    const stages = planStages(explained);
 
     expect(stages).toContain("IXSCAN");
     expect(stages).not.toContain("SORT");

@@ -8,7 +8,7 @@ import {
   searchQuery,
   timestamp,
 } from "../../lib/schemas.ts";
-import { SORT_KEYS } from "../../lib/query.ts";
+import { sortParams } from "../../lib/query.ts";
 
 export const PATIENT_CONDITIONS = [
   "stable",
@@ -19,6 +19,7 @@ export const PATIENT_CONDITIONS = [
 export const GENDERS = ["male", "female", "other"] as const;
 
 export const patientCondition = z.enum(PATIENT_CONDITIONS).meta({ id: "PatientCondition" });
+export type PatientCondition = z.infer<typeof patientCondition>;
 export const gender = z.enum(GENDERS).meta({ id: "Gender" });
 
 export const patientFields = z.object({
@@ -66,13 +67,19 @@ export type PatientDto = z.infer<typeof patient>;
 
 export const patientList = paginated(patient).meta({ id: "PatientList" });
 
+export const PATIENT_SORT_FIELDS = ["createdAt", "name", "age", "condition"] as const;
+export type PatientSortField = (typeof PATIENT_SORT_FIELDS)[number];
+
 const patientFilters = {
   ...paginationQuery,
   ...searchQuery,
   condition: patientCondition.optional(),
   gender: gender.optional(),
   ...dateRangeQuery,
-  sort: z.enum(SORT_KEYS).default("-createdAt"),
+  sort: z.enum(sortParams(PATIENT_SORT_FIELDS)).default("-createdAt").meta({
+    description:
+      "A leading `-` sorts descending. `condition` sorts by severity, so `-condition` lists critical first",
+  }),
 };
 
 export const listPatientsQuery = z.object({ ...patientFilters, doctorId: objectId.optional() });

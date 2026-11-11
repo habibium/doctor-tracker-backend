@@ -1,6 +1,7 @@
 import { model, Schema } from "mongoose";
+import type { SortSpec } from "../../lib/query.ts";
 import { phoneTokens, tokenize } from "../../lib/search.ts";
-import type { DoctorFields } from "./doctor.schema.ts";
+import type { DoctorFields, DoctorSortField } from "./doctor.schema.ts";
 
 export interface DoctorAttrs extends DoctorFields {
   /** Changed only inside the transactions that write patients; `pnpm db:recount` repairs it. */
@@ -35,6 +36,15 @@ doctorSchema.index({ hospital: 1, createdAt: -1, _id: -1 });
 doctorSchema.index({ name: 1, _id: 1 });
 doctorSchema.index({ patientCount: 1, createdAt: -1, _id: -1 });
 doctorSchema.index({ searchTokens: 1 });
+
+/** Each sort is the order of one index above, so an unfiltered page never sorts in memory. */
+export const DOCTOR_SORTS = {
+  createdAt: { createdAt: 1, _id: 1 },
+  name: { name: 1, _id: 1 },
+  specialization: { specialization: 1, createdAt: -1, _id: -1 },
+  hospital: { hospital: 1, createdAt: -1, _id: -1 },
+  patientCount: { patientCount: 1, createdAt: -1, _id: -1 },
+} satisfies Record<DoctorSortField, SortSpec>;
 
 export function doctorSearchTokens(doctor: DoctorFields): string[] {
   return [

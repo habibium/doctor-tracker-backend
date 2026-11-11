@@ -1,6 +1,7 @@
 import mongoose, { type Types } from "mongoose";
 import { Doctor } from "../modules/doctors/doctor.model.ts";
-import { Patient } from "../modules/patients/patient.model.ts";
+import { CONDITION_RANK, Patient } from "../modules/patients/patient.model.ts";
+import { PATIENT_CONDITIONS } from "../modules/patients/patient.schema.ts";
 
 /**
  * Recomputes every doctor's patientCount: one covered aggregation, one bulk write that touches
@@ -32,4 +33,17 @@ export async function recountPatients() {
     );
     return { doctorsCorrected: modifiedCount };
   });
+}
+
+/** Sets conditionRank wherever it is missing or stale, such as on data written before it existed. */
+export async function fillConditionRanks() {
+  const { modifiedCount } = await Patient.bulkWrite(
+    PATIENT_CONDITIONS.map((condition) => ({
+      updateMany: {
+        filter: { condition, conditionRank: { $ne: CONDITION_RANK[condition] } },
+        update: { $set: { conditionRank: CONDITION_RANK[condition] } },
+      },
+    })),
+  );
+  return { patientsCorrected: modifiedCount };
 }

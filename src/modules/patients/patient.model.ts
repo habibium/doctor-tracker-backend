@@ -1,9 +1,25 @@
 import { model, Schema, type Types } from "mongoose";
+import type { SortSpec } from "../../lib/query.ts";
 import { phoneTokens, tokenize } from "../../lib/search.ts";
-import { GENDERS, PATIENT_CONDITIONS, type PatientFields } from "./patient.schema.ts";
+import {
+  GENDERS,
+  PATIENT_CONDITIONS,
+  type PatientCondition,
+  type PatientFields,
+  type PatientSortField,
+} from "./patient.schema.ts";
+
+/** Severity order. Stored on each patient so one index serves the condition filter and sort. */
+export const CONDITION_RANK = {
+  stable: 1,
+  recovering: 2,
+  under_observation: 3,
+  critical: 4,
+} as const satisfies Record<PatientCondition, number>;
 
 export interface PatientAttrs extends PatientFields {
   doctor: Types.ObjectId;
+  conditionRank: number;
   searchTokens: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +39,7 @@ const patientSchema = new Schema<PatientAttrs>(
   {
     ...fields,
     doctor: { type: Schema.Types.ObjectId, ref: "Doctor", required: true },
+    conditionRank: { type: Number, select: false },
     searchTokens: { type: [String], select: false },
   },
   { timestamps: true },
@@ -30,9 +47,18 @@ const patientSchema = new Schema<PatientAttrs>(
 
 patientSchema.index({ createdAt: -1, _id: -1 });
 patientSchema.index({ doctor: 1, createdAt: -1, _id: -1 });
-patientSchema.index({ condition: 1, createdAt: -1, _id: -1 });
+patientSchema.index({ conditionRank: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ name: 1, _id: 1 });
+patientSchema.index({ age: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ searchTokens: 1 });
+
+/** Each sort is the order of one index above, so an unfiltered page never sorts in memory. */
+export const PATIENT_SORTS = {
+  createdAt: { createdAt: 1, _id: 1 },
+  name: { name: 1, _id: 1 },
+  age: { age: 1, createdAt: -1, _id: -1 },
+  condition: { conditionRank: 1, createdAt: -1, _id: -1 },
+} satisfies Record<PatientSortField, SortSpec>;
 
 export function patientSearchTokens(patient: PatientFields): string[] {
   return [...tokenize(patient.name, patient.diagnosis), ...phoneTokens(patient.phone)];
@@ -40,6 +66,7 @@ export function patientSearchTokens(patient: PatientFields): string[] {
 
 patientSchema.pre("save", function () {
   this.searchTokens = patientSearchTokens(this);
+  this.conditionRank = CONDITION_RANK[this.condition];
 });
 
 export const Patient = model<PatientAttrs>("Patient", patientSchema);

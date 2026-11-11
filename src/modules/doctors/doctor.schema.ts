@@ -8,7 +8,7 @@ import {
   searchQuery,
   timestamp,
 } from "../../lib/schemas.ts";
-import { SORT_KEYS } from "../../lib/query.ts";
+import { sortParams } from "../../lib/query.ts";
 
 export const doctorFields = z.object({
   name: z.string().trim().min(2).max(120),
@@ -39,13 +39,25 @@ export type DoctorDto = z.infer<typeof doctor>;
 
 export const doctorList = paginated(doctor).meta({ id: "DoctorList" });
 
+export const DOCTOR_SORT_FIELDS = [
+  "createdAt",
+  "name",
+  "specialization",
+  "hospital",
+  "patientCount",
+] as const;
+export type DoctorSortField = (typeof DOCTOR_SORT_FIELDS)[number];
+
 export const listDoctorsQuery = z.object({
   ...paginationQuery,
   ...searchQuery,
   specialization: z.string().trim().min(1).optional(),
   hospital: z.string().trim().min(1).optional(),
   ...dateRangeQuery,
-  sort: z.enum(SORT_KEYS).default("-createdAt"),
+  sort: z
+    .enum(sortParams(DOCTOR_SORT_FIELDS))
+    .default("-createdAt")
+    .meta({ description: "A leading `-` sorts descending" }),
 });
 export type ListDoctorsQuery = z.infer<typeof listDoctorsQuery>;
 
