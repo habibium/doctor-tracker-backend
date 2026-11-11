@@ -11,7 +11,8 @@ import { FAMILY_NAMES, FEMALE_NAMES, HOSPITALS, MALE_NAMES, SPECIALIZATIONS } fr
 const DOCTOR_COUNT = 300;
 const PATIENT_COUNT = 30_000;
 const DAY_MS = 86_400_000;
-const DHAKA_OFFSET_MS = 6 * 3_600_000;
+const HOUR_MS = 3_600_000;
+const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 
 type Gender = (typeof GENDERS)[number];
 type Condition = (typeof PATIENT_CONDITIONS)[number];
@@ -58,10 +59,32 @@ const CONDITION_WEIGHTS: Record<Condition, number> = {
   critical: 8,
 };
 
+/** Relative registrations per Dhaka hour, 00 to 23: a late-morning peak and a smaller evening one. */
+// prettier-ignore
+const INTAKE_BY_HOUR = [
+  0.2, 0.1, 0.1, 0.1, 0.1, 0.2, 0.4, 1.2,
+  4, 8, 12, 13, 10, 7, 6, 6,
+  7, 8.5, 9, 7.5, 4.5, 1.5, 0.6, 0.3,
+];
+const HOURS = INTAKE_BY_HOUR.map((_, hour) => hour);
+
 /** Fewer registrations on Friday and Saturday, the weekend in Bangladesh. */
 function isQuietDay(date: Date) {
   const day = new Date(date.getTime() + DHAKA_OFFSET_MS).getUTCDay();
   return (day === 5 && random() < 0.6) || (day === 6 && random() < 0.3);
+}
+
+/** A random day in the window, at a clinic hour in Dhaka. Draws outside the window are redrawn. */
+function registrationTime(earliest: number, latest: number) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const instant = earliest + random() * (latest - earliest);
+    let midnight = instant - ((instant + DHAKA_OFFSET_MS) % DAY_MS);
+    if (isQuietDay(new Date(midnight))) midnight += 2 * DAY_MS;
+    const hour = pickWeighted(HOURS, (item) => INTAKE_BY_HOUR[item] ?? 0);
+    const time = midnight + (hour + random()) * HOUR_MS;
+    if (time >= earliest && time <= latest) return new Date(time);
+  }
+  return new Date(earliest + random() * (latest - earliest));
 }
 
 function buildDoctors(now: number) {
@@ -70,7 +93,7 @@ function buildDoctors(now: number) {
     const hospital = pick(HOSPITALS);
     const given = pick(random() < 0.5 ? MALE_NAMES : FEMALE_NAMES);
     const family = pick(FAMILY_NAMES);
-    const createdAt = new Date(now - between(1, 540) * DAY_MS - between(0, DAY_MS));
+    const createdAt = registrationTime(now - 541 * DAY_MS, now - DAY_MS);
 
     const fields = {
       name: `${given} ${family}`,
@@ -102,10 +125,7 @@ function buildPatients(doctors: ReturnType<typeof buildDoctors>, now: number) {
   return Array.from({ length: PATIENT_COUNT }, () => {
     const { doctor, specialization } = pickWeighted(doctors, (item) => item.popularity);
 
-    const earliest = doctor.createdAt.getTime();
-    let createdAt = new Date(earliest + random() * (now - earliest));
-    if (isQuietDay(createdAt))
-      createdAt = new Date(Math.min(now, createdAt.getTime() + 2 * DAY_MS));
+    const createdAt = registrationTime(doctor.createdAt.getTime(), now);
 
     const roll = random();
     const gender: Gender = specialization.femaleOnly
