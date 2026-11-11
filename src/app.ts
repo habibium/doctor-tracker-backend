@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 import { pinoHttp } from "pino-http";
 import type { Auth } from "./auth/auth.ts";
 import { requireAuth } from "./auth/middleware.ts";
-import { env } from "./config/env.ts";
+import { env, webOrigins } from "./config/env.ts";
 import { logger } from "./lib/logger.ts";
 import { mountRoutes } from "./lib/route.ts";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.ts";
@@ -30,7 +30,7 @@ export function createApp(auth: Auth) {
       },
     }),
   );
-  app.use(cors({ origin: [env.WEB_ORIGIN], credentials: true }));
+  app.use(cors({ origin: webOrigins, credentials: true }));
 
   const openApiDocument = buildOpenApiDocument(routes);
   app.get("/openapi.json", (_req, res) => {

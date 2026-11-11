@@ -73,6 +73,7 @@ There is no public sign-up. Accounts are created by the seed script.
 | `BETTER_AUTH_SECRET`            | Signs session cookies. At least 32 characters.                                    |
 | `WEB_ORIGIN`                    | Origin of the Next.js app. Auth cookies are issued for it and CORS allows it.     |
 | `API_URL`                       | Public URL of this API.                                                           |
+| `TRUSTED_ORIGINS`               | Optional, comma-separated. Extra origins allowed to sign in and call the API.     |
 | `TRUST_PROXY`                   | Number of reverse proxies in front of the API.                                    |
 | `PORT`, `LOG_LEVEL`, `NODE_ENV` | Standard runtime settings.                                                        |
 
