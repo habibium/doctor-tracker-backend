@@ -1,6 +1,6 @@
 # Doctor Tracker API
 
-Doctor Tracker is an admin portal for managing doctors and the patients under their care. This repository is its REST API: a standalone Express server on MongoDB that handles sign-in, doctor and patient records with fast search, filtering and pagination, and the aggregated analytics behind the dashboard. Every endpoint is validated, documented and typed from a single definition, so the Next.js frontend talks to it through a generated, type-safe client.
+Doctor Tracker is an admin portal for managing doctors and the patients under their care. This repository is its REST API: a standalone Express server on MongoDB that handles sign-in and user accounts, doctor and patient records with fast search, filtering and pagination, and the aggregated analytics behind the dashboard. Every endpoint is validated, documented and typed from a single definition, so the Next.js frontend talks to it through a generated, type-safe client.
 
 The frontend lives in a separate repository: `doctor-tracker-frontend`.
 
@@ -8,7 +8,7 @@ The frontend lives in a separate repository: `doctor-tracker-frontend`.
 
 - **Runtime:** Node.js 24, Express 5, TypeScript
 - **Database:** MongoDB with Mongoose 9
-- **Auth:** better-auth (database sessions in httpOnly cookies, `admin` and `viewer` roles)
+- **Auth:** better-auth (database sessions in httpOnly cookies, checked on every request; `admin` and `viewer` roles)
 - **Contract:** Zod 4 schemas generating an OpenAPI 3.1 document, served with Scalar
 - **Tests:** Vitest and Supertest against an in-memory MongoDB replica set
 
@@ -20,14 +20,15 @@ You need Node.js 24 or later, pnpm, and Docker for the local database.
 # 1. Install dependencies
 pnpm install
 
-# 2. Create your environment file and set a secret
+# 2. Create your environment file, set a secret and choose the first admin
 cp .env.example .env
 openssl rand -base64 32   # paste the output as BETTER_AUTH_SECRET in .env
+# then set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (12 characters or more) in .env
 
 # 3. Start MongoDB (a single-node replica set in Docker)
 pnpm db:up
 
-# 4. Create the demo accounts, 300 doctors and 30,000 patients
+# 4. Create the admin account, 300 doctors and 30,000 patients
 pnpm seed
 
 # 5. Start the API with reload
@@ -42,41 +43,53 @@ The API listens on `http://localhost:4000`:
 | `/openapi.json` | OpenAPI 3.1 document the frontend client is generated from |
 | `/health`       | Liveness and database status                               |
 | `/api/auth/*`   | Sign-in, sign-out and session endpoints (better-auth)      |
-| `/api/v1/*`     | Doctors, patients and analytics                            |
+| `/api/v1/*`     | Doctors, patients, analytics and users                     |
 
-Demo accounts created by the seed script:
+### Accounts
 
-| Role   | Email                      | Password       | Can do                       |
-| ------ | -------------------------- | -------------- | ---------------------------- |
-| Admin  | `admin@doctortracker.dev`  | `Admin@12345`  | Everything                   |
-| Viewer | `viewer@doctortracker.dev` | `Viewer@12345` | Read only; writes return 403 |
+No account or password is published in this repository. The seed script creates the first admin from `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, which have no defaults; after that, admins add everyone else from the Users page, and there is no public sign-up.
 
-There is no public sign-up. Accounts are created by the seed script.
+| Role   | Can do                                                   |
+| ------ | -------------------------------------------------------- |
+| Admin  | Everything, including adding and managing users          |
+| Viewer | Read only; writes and every `/users` endpoint return 403 |
+
+How the seed treats the `SEED_*` variables:
+
+- **Admin pair set:** the account is created, or an existing one is given that name and role, reactivated, and its password replaced if it differs (which also signs it out everywhere). Re-running the seed is how a forgotten admin password is recovered.
+- **Admin pair not set:** fine once an active admin exists; the seed says it is keeping them and seeds the data. On a database with no active admin it stops before writing anything, since nobody could sign in to the result.
+- **Viewer pair:** optional, same rules.
+- **Only one of a pair set, an invalid email, or a short password:** the seed stops before writing anything and names the variable.
+
+Once the first admin exists, the `SEED_*` lines can be left blank, so no password has to stay in `.env`.
 
 ### Scripts
 
-| Command                                        | Purpose                                                                    |
-| ---------------------------------------------- | -------------------------------------------------------------------------- |
-| `pnpm dev`                                     | Run the API with reload                                                    |
-| `pnpm build` / `pnpm start`                    | Compile to `dist/` and run the compiled server                             |
-| `pnpm test`                                    | Run unit and integration tests                                             |
-| `pnpm typecheck` / `pnpm lint` / `pnpm format` | Static checks and formatting                                               |
-| `pnpm seed`                                    | Create accounts and demo data (`pnpm seed --fresh` replaces existing data) |
-| `pnpm openapi`                                 | Write `openapi.json` without starting the server                           |
-| `pnpm db:up` / `pnpm db:down`                  | Start or stop the local MongoDB container                                  |
-| `pnpm db:recount`                              | Recompute stored patient counts and condition ranks from the patients      |
+| Command                                        | Purpose                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `pnpm dev`                                     | Run the API with reload                                                  |
+| `pnpm build` / `pnpm start`                    | Compile to `dist/` and run the compiled server                           |
+| `pnpm test`                                    | Run unit and integration tests                                           |
+| `pnpm typecheck` / `pnpm lint` / `pnpm format` | Static checks and formatting                                             |
+| `pnpm seed`                                    | Create the `SEED_*` accounts and demo data (`--fresh` replaces the data) |
+| `pnpm openapi`                                 | Write `openapi.json` without starting the server                         |
+| `pnpm db:up` / `pnpm db:down`                  | Start or stop the local MongoDB container                                |
+| `pnpm db:recount`                              | Recompute stored patient counts and condition ranks from the patients    |
 
 ### Environment variables
 
-| Variable                        | Purpose                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------------- |
-| `MONGODB_URI`                   | MongoDB connection string. Must be a replica set (Atlas, or the local container). |
-| `BETTER_AUTH_SECRET`            | Signs session cookies. At least 32 characters.                                    |
-| `WEB_ORIGIN`                    | Origin of the Next.js app. Auth cookies are issued for it and CORS allows it.     |
-| `API_URL`                       | Public URL of this API.                                                           |
-| `TRUSTED_ORIGINS`               | Optional, comma-separated. Extra origins allowed to sign in and call the API.     |
-| `TRUST_PROXY`                   | Number of reverse proxies in front of the API.                                    |
-| `PORT`, `LOG_LEVEL`, `NODE_ENV` | Standard runtime settings.                                                        |
+| Variable                                    | Purpose                                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------------- |
+| `MONGODB_URI`                               | MongoDB connection string. Must be a replica set (Atlas, or the local container). |
+| `BETTER_AUTH_SECRET`                        | Signs session cookies. At least 32 characters.                                    |
+| `WEB_ORIGIN`                                | Origin of the Next.js app. Auth cookies are issued for it and CORS allows it.     |
+| `API_URL`                                   | Public URL of this API.                                                           |
+| `TRUSTED_ORIGINS`                           | Optional, comma-separated. Extra origins allowed to sign in and call the API.     |
+| `TRUST_PROXY`                               | Number of reverse proxies in front of the API.                                    |
+| `PORT`, `LOG_LEVEL`, `NODE_ENV`             | Standard runtime settings.                                                        |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`   | `pnpm seed` only. The first admin; required until an active admin exists.         |
+| `SEED_VIEWER_EMAIL`, `SEED_VIEWER_PASSWORD` | `pnpm seed` only. An optional read-only account.                                  |
+| `SEED_ADMIN_NAME`, `SEED_VIEWER_NAME`       | `pnpm seed` only. Display names; optional.                                        |
 
 ## System architecture
 
@@ -113,8 +126,9 @@ src/
     doctors/           schema (Zod) · model (Mongoose) · service · routes
     patients/          schema · model · service · routes
     analytics/         schema · service · routes
+    users/             schema · read model · service · routes
   openapi/             OpenAPI document builder
-  db/                  Connection, index setup, seed and recount scripts
+  db/                  Connection, index setup, seed (data and accounts) and recount scripts
 tests/                 Unit and integration tests
 ```
 
@@ -124,7 +138,7 @@ tests/                 Unit and integration tests
 - **Sorting** takes a field, with a leading `-` for descending; the default is `-createdAt`. Doctors sort by `createdAt`, `name`, `specialization`, `hospital` or `patientCount`. Patients sort by `createdAt`, `name`, `age` or `condition`, which orders by severity: `-condition` lists critical patients first. Ties break newest first, and the descending form is the exact reverse.
 - **Time zones:** analytics that group by day, month or hour take an IANA `timezone` (default `UTC`).
 - **Errors** return `{ error: { code, message, details? } }`. Validation failures list every invalid field as `{ path, message }`.
-- **Status codes:** 400 validation, 401 not signed in, 403 wrong role, 404 missing, 409 conflict (duplicate email, or deleting a doctor who still has patients).
+- **Status codes:** 400 validation, 401 not signed in, 403 wrong role or a change to your own account, 404 missing, 409 conflict (duplicate email, or deleting a doctor who still has patients).
 
 | Area                | Endpoints                                                                      |
 | ------------------- | ------------------------------------------------------------------------------ |
@@ -132,6 +146,7 @@ tests/                 Unit and integration tests
 | A doctor's patients | `GET/POST /doctors/{id}/patients`, `DELETE /doctors/{id}/patients/{patientId}` |
 | Patients            | `GET/POST /patients`, `GET/PATCH/DELETE /patients/{id}`                        |
 | Analytics           | `GET /analytics/*` (below) and `GET /doctors/{id}/analytics`                   |
+| Users (admins only) | `GET/POST /users`, `PATCH/DELETE /users/{id}`, `POST /users/{id}/password`     |
 
 Doctor responses include `patientCount` and `conditionCounts: { stable, recovering, under_observation, critical }`.
 
@@ -149,6 +164,25 @@ Doctor responses include `patientCount` and `conditionCounts: { stable, recoveri
 | `/doctors/{id}/analytics?timezone`                                  | One doctor's conditions, last 12 months, age groups and genders               |
 
 `range` is `7d`, `30d`, `90d` or `12m` (365 days), ending now. It defaults to `30d`, except intake hours, which default to `90d`.
+
+**Users.** Every `/users` endpoint needs the `admin` role. A user is `{ id, name, email, role, status, deactivatedAt, createdAt }`, where `status` is `active` or `deactivated`; passwords are never returned.
+
+| Endpoint                    | Body                          | Does                                                                                                                                                   |
+| --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /users`                |                               | Lists users. `search` matches the start of words in name and email; filters `role`, `status`, `from`, `to`; sorts `createdAt`, `name`, `email`, `role` |
+| `POST /users`               | `name, email, role, password` | Creates a user who can sign in with that password. 409 on `body.email` if taken                                                                        |
+| `PATCH /users/{id}`         | any of `name, role, status`   | Renames, changes the role, deactivates or reactivates                                                                                                  |
+| `POST /users/{id}/password` | `password`                    | Replaces the password (204)                                                                                                                            |
+| `DELETE /users/{id}`        |                               | Deletes the user and their sign-in (204)                                                                                                               |
+
+The rules are enforced in the service, and each has a test:
+
+- **Email is unique**, ignoring case, including under two simultaneous creates.
+- **Not on yourself:** an admin cannot change their own role, deactivate, delete or reset the password of their own account (403 `OWN_ACCOUNT`). Your own password is changed through better-auth's `POST /api/auth/change-password`, which needs the current one.
+- **At least one active admin remains**, also when two admins try to remove each other at the same moment (Technical decision 5).
+- **Deactivated means out:** a deactivated user's sessions end at once and sign-in answers 403 `ACCOUNT_DEACTIVATED`, but only after a correct password, so the status tells a stranger nothing.
+- **Sessions end on every change that matters:** a role change, password reset, deactivation or deletion signs the user out everywhere. Changing your own password signs out your other devices.
+- **One password rule everywhere:** 12 to 128 characters for the seed, create, reset and change, in better-auth's config and the route schemas alike.
 
 ## Technical decisions
 
@@ -231,6 +265,23 @@ Every list sort is the order of one index, ending in `_id`, so an unfiltered pag
 
 One doctor's patient list is pinned to the two indexes that start with `doctor`. Left to the planner, a `name` sort for the busiest doctor (476 patients) picks the global `name` index, and once that plan is cached, a doctor with one patient walks the whole name index until MongoDB replans. With the hint, the worst case is that doctor's own rows sorted in memory.
 
+### 5. Users through better-auth's internals, not its admin plugin
+
+better-auth owns the `user`, `account` and `session` collections, so user management goes through it rather than around it. It offers two ways in, and this API uses the second:
+
+| Option                                                      | Why not, or why                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The admin plugin                                            | Its endpoints would mount at `/api/auth/admin/*` beside this API, as a second user-management surface that enforces none of the rules above: an admin could demote themselves or the last admin, and a role change or password reset would leave sessions open. With them disabled, what remains is a ban flag and a sign-in hook, which this API configures in a dozen lines. |
+| The internal adapter and password helpers (`auth.$context`) | The same calls better-auth's own endpoints make: `createUser`, `linkAccount`, `updateUser`, `updatePassword`, `deleteUserSessions`, `deleteUser`, and its scrypt `password.hash`. The service wraps them in better-auth's `runWithTransaction`, so a user and their credential are created together, and a change and the end of that user's sessions commit together.         |
+
+Three details make the rules hold:
+
+- **Sessions are read on every request.** better-auth's cookie cache would let a revoked session or an old role live on in a signed cookie for minutes, so it is off; each request reads its session by token from MongoDB, an indexed lookup. Deleting a user's sessions therefore takes effect on their next request.
+- **The last admin cannot be removed, even concurrently.** Only another admin can demote, deactivate or delete an admin, so one always remains, unless two admins remove each other at the same moment. Inside the transaction, the service re-reads the acting admin, refuses if they are no longer an active admin, and writes their record. Two admins removing each other then write the same two documents, MongoDB aborts one transaction with a write conflict, and the driver retries it, now seeing that its actor was removed. The tests run that race for demote, deactivate and delete, and fail if the write is taken out.
+- **Indexes better-auth does not create.** Its MongoDB adapter builds none of the indexes declared on better-auth's own tables. Startup creates them under better-auth's own names: a unique `user.email` (better-auth otherwise checks uniqueness by reading first, which two simultaneous creates both pass), `session.token` for the lookup on every request, and `session.userId` and `account.userId` for sign-in and revocation.
+
+The users list reads the `user` collection through a read-only Mongoose model, so it shares the list contract of doctors and patients. Its search is a case-insensitive regex anchored at word starts rather than the indexed token search, because the collection holds staff accounts, not tens of thousands of records.
+
 ## Query performance
 
 Plans were captured with `explain("executionStats")` on MongoDB 8 against the seeded data (300 doctors, 30,000 patients). "Covered" means the plan is `PROJECTION_COVERED` over the index: no document is read.
@@ -285,15 +336,19 @@ Points worth noting:
 
 ## Security
 
-- Passwords are hashed by better-auth and never returned. Sessions live in MongoDB and can be revoked.
+- No account or password is published: the first admin comes from environment variables that have no defaults, and admins add everyone else.
+- Passwords are 12 to 128 characters, hashed by better-auth with scrypt and never returned. Sessions live in MongoDB and are read on every request, so revoking one takes effect on the next request. A role change, password reset, deactivation or deletion ends the user's sessions; a password change ends the user's other sessions.
+- A deactivated account is refused at sign-in, after the password check, and its open sessions are gone.
 - Session cookies are httpOnly and `SameSite=Lax`, and `Secure` over HTTPS. The API accepts JSON bodies only, so a cross-site form cannot forge a write.
-- Every `/api/v1` route requires a session; routes that change data also require the `admin` role.
+- Every `/api/v1` route requires a session; routes that change data, and every `/users` route, also require the `admin` role. There is no public sign-up.
 - Request data is validated before it reaches a query, and Mongoose runs with `strictQuery: "throw"`, so unknown filter paths are rejected rather than ignored.
 - Sign-in attempts are rate limited in production, and responses carry `helmet` security headers.
 
 ## Testing
 
-`pnpm test` runs 97 tests in about ten seconds. Integration tests start an in-memory MongoDB replica set, sign in real sessions, and cover access control, validation, conflicts, search, filters, every sort key, pagination and each analytics endpoint.
+`pnpm test` runs 127 tests in about ten seconds. Integration tests start an in-memory MongoDB replica set, sign in real sessions, and cover access control, validation, conflicts, search, filters, every sort key, pagination and each analytics endpoint.
+
+- **Users:** every rule in the API conventions above, through real sign-ins: a revoked session gets 401 on its next request, a deactivated user is refused at sign-in, the old password stops working after a reset, and only one of two simultaneous creates with the same email succeeds. Two admins removing each other at once, by demotion, deactivation or deletion, must leave exactly one. Viewers get 403 on every endpoint. The seed's parsing of `SEED_*` and its password rotation are tested too.
 
 - **Counters:** patients are created, moved and deleted through every write endpoint, including failed writes, and 25 concurrent creates for one doctor must end with the exact count. The recount script must repair drifted counters and leave correct ones alone.
 - **Query plans:** every unfiltered sort must walk an index with no in-memory sort or collection scan; the per-page condition counts and the condition ranking must read no documents; each doctor analytics pipeline must stay inside that doctor's index range. Removing an index fails the suite.
@@ -303,11 +358,13 @@ Points worth noting:
 
 The `Dockerfile` builds a production image that runs `node dist/server.js` as a non-root user, with a health check on `/health`. Set the environment variables from the table above, point `MONGODB_URI` at MongoDB Atlas, and set `TRUST_PROXY` to the number of proxies in front of the container. Indexes are created on startup.
 
-To seed a hosted database, run the seed script locally with its connection string:
+To seed a hosted database, run the seed script locally with its connection string and the first admin's details:
 
 ```bash
-MONGODB_URI="mongodb+srv://..." pnpm seed
+MONGODB_URI="mongodb+srv://..." SEED_ADMIN_EMAIL="..." SEED_ADMIN_PASSWORD="..." pnpm seed
 ```
+
+Databases seeded before this version hold demo accounts whose passwords were published in this repository. Sign in as an admin and delete them from the Users page, or reset their passwords; running the seed with the same email and a new password also replaces it.
 
 When upgrading a database seeded before patient counts and condition ranks existed, run `pnpm db:recount` against it once, or reseed with `pnpm seed --fresh`.
 
