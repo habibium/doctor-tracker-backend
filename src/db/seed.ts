@@ -1,11 +1,11 @@
 import { Types } from "mongoose";
-import * as z from "zod";
-import { createAuth, type Role } from "../auth/auth.ts";
+import { createAuth } from "../auth/auth.ts";
 import { env } from "../config/env.ts";
 import { Doctor, doctorSearchTokens } from "../modules/doctors/doctor.model.ts";
 import { CONDITION_RANK, Patient, patientSearchTokens } from "../modules/patients/patient.model.ts";
 import { GENDERS, PATIENT_CONDITIONS } from "../modules/patients/patient.schema.ts";
 import { connectDatabase, disconnectDatabase, syncIndexes } from "./connection.ts";
+import { readSeedAccounts, seedAccounts } from "./seed-accounts.ts";
 import { FAMILY_NAMES, FEMALE_NAMES, HOSPITALS, MALE_NAMES, SPECIALIZATIONS } from "./seed-data.ts";
 
 const DOCTOR_COUNT = 300;
@@ -17,14 +17,7 @@ const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 type Gender = (typeof GENDERS)[number];
 type Condition = (typeof PATIENT_CONDITIONS)[number];
 
-const accounts = z
-  .object({
-    SEED_ADMIN_EMAIL: z.email().default("admin@doctortracker.dev"),
-    SEED_ADMIN_PASSWORD: z.string().min(8).default("Admin@12345"),
-    SEED_VIEWER_EMAIL: z.email().default("viewer@doctortracker.dev"),
-    SEED_VIEWER_PASSWORD: z.string().min(8).default("Viewer@12345"),
-  })
-  .parse(process.env);
+const accounts = readSeedAccounts();
 
 /** mulberry32: a fixed seed keeps names and proportions identical between runs. */
 function createRandom(seed: number) {
@@ -163,31 +156,7 @@ function buildPatients(doctors: ReturnType<typeof buildDoctors>, now: number) {
 
 const connection = await connectDatabase(env.MONGODB_URI);
 const client = connection.getClient();
-const users = client.db().collection("user");
-const auth = createAuth(client, { allowSignUp: true });
-
-async function ensureAccount(name: string, email: string, password: string, role: Role) {
-  if (!(await users.findOne({ email }))) {
-    await auth.api.signUpEmail({ body: { name, email, password } });
-  }
-  // Also refreshes the name, so re-running the seed renames existing demo accounts.
-  await users.updateOne({ email }, { $set: { role, name } });
-  console.log(`  ${role.padEnd(6)} ${email}`);
-}
-
-console.log("Accounts");
-await ensureAccount(
-  "Nadia Rahman",
-  accounts.SEED_ADMIN_EMAIL,
-  accounts.SEED_ADMIN_PASSWORD,
-  "admin",
-);
-await ensureAccount(
-  "Tareq Hasan",
-  accounts.SEED_VIEWER_EMAIL,
-  accounts.SEED_VIEWER_PASSWORD,
-  "viewer",
-);
+await seedAccounts(createAuth(client), accounts);
 
 await syncIndexes();
 

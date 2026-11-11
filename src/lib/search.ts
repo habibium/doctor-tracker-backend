@@ -28,3 +28,19 @@ export function searchFilter(search: string | undefined) {
   // Tokens contain only letters, marks and digits, so they need no regex escaping.
   return { $and: terms.map((term) => ({ searchTokens: { $regex: `^${term}` } })) };
 }
+
+/**
+ * The same matching against plain fields: a case-insensitive regex anchored at a word
+ * start. It cannot use an index, so it is only for small collections such as users.
+ */
+export function wordStartFilter(search: string | undefined, fields: readonly string[]) {
+  const terms = tokenize(search).slice(0, MAX_QUERY_TERMS);
+  if (terms.length === 0) return {};
+  const wordStart = (term: string) => ({
+    $regex: `(?:^|[^\\p{L}\\p{M}\\p{N}])${term}`,
+    $options: "i",
+  });
+  return {
+    $and: terms.map((term) => ({ $or: fields.map((field) => ({ [field]: wordStart(term) })) })),
+  };
+}

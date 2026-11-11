@@ -20,6 +20,7 @@
     "openapi": "tsx --env-file-if-exists=.env src/openapi/write-spec.ts"
   },
   "dependencies": {
+    "@better-auth/core": "1.7.18",
     "@better-auth/mongo-adapter": "^1.7.18",
     "@scalar/express-api-reference": "^0.10.35",
     "better-auth": "^1.7.18",

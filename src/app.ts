@@ -65,7 +65,7 @@ export function createApp(auth: Auth) {
 
   const api = express.Router();
   api.use(requireAuth(auth));
-  mountRoutes(api, routes);
+  mountRoutes(api, routes, auth);
   app.use(API_PREFIX, api);
 
   app.use(notFoundHandler);

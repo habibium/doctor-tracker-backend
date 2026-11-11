@@ -1,6 +1,6 @@
 import type { Request, Response, Router } from "express";
 import type * as z from "zod";
-import type { AuthUser, Role } from "../auth/auth.ts";
+import type { Auth, AuthUser, Role } from "../auth/auth.ts";
 import { forbidden, validationError } from "./errors.ts";
 
 export type ErrorStatus = 400 | 404 | 409;
@@ -18,6 +18,7 @@ interface RouteContext<TReq extends RequestSchemas> {
   query: Parsed<TReq["query"]>;
   body: Parsed<TReq["body"]>;
   user: AuthUser;
+  auth: Auth;
 }
 
 interface RouteConfig<TReq extends RequestSchemas, TRes extends z.ZodType | undefined> {
@@ -51,7 +52,7 @@ export function defineRoute<
   return config;
 }
 
-export function mountRoutes(router: Router, routes: readonly Route[]) {
+export function mountRoutes(router: Router, routes: readonly Route[], auth: Auth) {
   for (const route of routes) {
     const expressPath = route.path.replace(/\{(\w+)\}/g, ":$1");
 
@@ -65,6 +66,7 @@ export function mountRoutes(router: Router, routes: readonly Route[]) {
         query: request?.query && parse(request.query, req.query, "query"),
         body: request?.body && parse(request.body, req.body, "body"),
         user,
+        auth,
       };
 
       const result = await route.handler(ctx as never);
