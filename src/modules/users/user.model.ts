@@ -12,10 +12,7 @@ export interface UserRecord {
   updatedAt: Date;
 }
 
-/**
- * Read-only view of better-auth's `user` collection, for list queries. Every write goes
- * through better-auth, which owns the collection and its indexes.
- */
+/** Read-only view of better-auth's `user` collection for lists; every write goes through better-auth. */
 const userSchema = new Schema<UserRecord>(
   {
     name: String,

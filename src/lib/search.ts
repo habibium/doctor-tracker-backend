@@ -29,10 +29,7 @@ export function searchFilter(search: string | undefined) {
   return { $and: terms.map((term) => ({ searchTokens: { $regex: `^${term}` } })) };
 }
 
-/**
- * The same matching against plain fields: a case-insensitive regex anchored at a word
- * start. It cannot use an index, so it is only for small collections such as users.
- */
+/** The same matching on plain fields, by word-start regex. It can't use an index: small collections only. */
 export function wordStartFilter(search: string | undefined, fields: readonly string[]) {
   const terms = tokenize(search).slice(0, MAX_QUERY_TERMS);
   if (terms.length === 0) return {};

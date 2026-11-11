@@ -16,9 +16,8 @@ export async function ensureIndexes() {
 }
 
 /**
- * better-auth's MongoDB adapter builds none of the indexes its schema declares. These
- * serve the session lookup on every request and sign-in, and make emails unique, which
- * better-auth otherwise only checks by reading first. Names follow better-auth's scheme.
+ * better-auth's MongoDB adapter builds none of its schema's indexes. These serve the
+ * per-request session lookup and sign-in, and make emails unique; names follow its scheme.
  */
 export async function ensureAuthIndexes() {
   const collection = (name: string) => mongoose.connection.collection(name);

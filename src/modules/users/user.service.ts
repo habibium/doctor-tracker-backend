@@ -48,9 +48,8 @@ async function findUser(ctx: AuthContext, id: string) {
 }
 
 /**
- * Only another active admin can remove an admin, so one always remains. Inside the
- * transaction the actor must still be one, and touching their record makes two admins
- * removing each other conflict: MongoDB retries the later one, which then fails here.
+ * Only another active admin can remove an admin. Writing the actor's record makes two admins
+ * removing each other conflict; MongoDB retries the later one, which then fails this check.
  */
 async function lockActingAdmin(ctx: AuthContext, actorId: string) {
   const actor = (await ctx.internalAdapter.findUserById(actorId)) as StoredUser | null;

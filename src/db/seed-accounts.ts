@@ -15,10 +15,7 @@ export interface SeedAccount {
 
 const DEFAULT_NAMES: Record<Role, string> = { admin: "Nadia Rahman", viewer: "Tareq Hasan" };
 
-/**
- * Reads `SEED_ADMIN_*` and `SEED_VIEWER_*`. Nothing has a default: an account is seeded
- * only when both its email and password are set, and setting just one is an error.
- */
+/** No defaults: an account is seeded only when both its email and password are set. */
 export function parseSeedAccounts(source: Record<string, string | undefined>) {
   const accounts: SeedAccount[] = [];
   const errors: string[] = [];
@@ -58,9 +55,8 @@ export function readSeedAccounts() {
 }
 
 /**
- * Creates each account, or brings an existing one back to the configured name, role and
- * password. With no admin configured, an active admin must already exist, or nobody
- * could sign in to the seeded data.
+ * Creates each account or resets it to the configured name, role and password. With no
+ * admin configured, an active admin must already exist, or nobody could sign in.
  */
 export async function seedAccounts(auth: Auth, accounts: SeedAccount[]) {
   await ensureAuthIndexes();
