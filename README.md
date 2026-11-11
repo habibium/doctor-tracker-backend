@@ -410,3 +410,11 @@ When upgrading a database seeded before patient counts and condition ranks exist
 - **Patient counts:** done; see Technical decision 3. The counter's cost grows with the write rate for a single doctor, not with the size of the collection. If one doctor ever received writes faster than transactions on its document can commit, the counter could be split into a few sub-counters per doctor, summed on read.
 - **Long time series:** registrations, intake hours and the trends baseline read one index key per patient in the window (17,312 for a year of daily points here, 30,000 for the two years of trends). At millions of patients, roll each day's counts per diagnosis into a summary collection with `$merge` and read that instead; the diagnosis ranking would read the same roll-up.
 - **Search:** move to Atlas Search when fuzzy or relevance-ranked matching is needed.
+
+## Visual evidence
+
+The API has no screens of its own; what it shows is its contract. These are the interactive docs it serves at `/docs`, generated from the same route definitions that validate every request. Screenshots of the application itself, on desktop and on a phone, are in the [frontend repository's README](https://github.com/habibium/doctor-tracker-frontend#visual-evidence).
+
+| API docs, desktop                                                                                          | API docs, phone                                                       |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ![The interactive API reference with endpoints grouped by resource](docs/screenshots/api-docs-desktop.png) | ![The API reference on a phone](docs/screenshots/api-docs-mobile.png) |
