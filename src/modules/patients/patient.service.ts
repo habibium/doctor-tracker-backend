@@ -12,6 +12,7 @@ import {
 } from "../doctors/doctor.service.ts";
 import {
   CONDITION_RANK,
+  DIAGNOSIS_INDEX,
   DOCTOR_INDEXES,
   Patient,
   PATIENT_SORTS,
@@ -64,6 +65,7 @@ export async function listPatients(query: ListPatientsQuery) {
     ...(query.doctorId && { doctor: query.doctorId }),
     ...(query.condition && { conditionRank: CONDITION_RANK[query.condition] }),
     ...(query.gender && { gender: query.gender }),
+    ...(query.diagnosis && { diagnosis: query.diagnosis }),
     ...(createdAt && { createdAt }),
   };
 
@@ -71,7 +73,10 @@ export async function listPatients(query: ListPatientsQuery) {
     .sort(sortSpec(PATIENT_SORTS, query.sort))
     .skip((query.page - 1) * query.limit)
     .limit(query.limit);
+  // Pinned for the same reason as a doctor's list: a sort index cached for a common diagnosis
+  // would otherwise walk far past a rare one's rows.
   if (query.doctorId) find.hint(doctorIndexFor(query));
+  else if (query.diagnosis) find.hint(DIAGNOSIS_INDEX);
 
   const [docs, total] = await Promise.all([
     find.populate<{ doctor: DoctorSummary | null }>("doctor", DOCTOR_SUMMARY).lean(),

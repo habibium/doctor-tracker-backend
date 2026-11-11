@@ -86,6 +86,13 @@ const patientFilters = {
   ...searchQuery,
   condition: patientCondition.optional(),
   gender: gender.optional(),
+  diagnosis: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .meta({ description: "Exact diagnosis, as recorded" }),
   ...dateRangeQuery,
   sort: z.enum(sortParams(PATIENT_SORT_FIELDS)).default("-createdAt").meta({
     description:

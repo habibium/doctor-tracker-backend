@@ -67,6 +67,9 @@ patientSchema.index({ createdAt: -1, _id: -1 });
 patientSchema.index(DOCTOR_INDEXES.byDate);
 patientSchema.index(DOCTOR_INDEXES.byCondition);
 patientSchema.index({ conditionRank: 1, createdAt: -1, _id: -1 });
+/** Serves the diagnosis filter in date order, and covers the diagnosis ranking and trends. */
+export const DIAGNOSIS_INDEX = { diagnosis: 1, createdAt: -1, _id: -1 } as const;
+patientSchema.index(DIAGNOSIS_INDEX);
 patientSchema.index({ name: 1, _id: 1 });
 patientSchema.index({ age: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ searchTokens: 1 });
