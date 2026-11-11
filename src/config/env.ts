@@ -24,6 +24,12 @@ const envSchema = z.object({
   API_URL: origin,
   TRUSTED_ORIGINS: originList,
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  CLIENT_IP_HEADER: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9-]*$/, "must be a header name")
+    .default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

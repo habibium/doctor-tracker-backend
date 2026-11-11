@@ -71,6 +71,11 @@ export function createAuth(client: MongoClient) {
       }),
     },
     rateLimit: { enabled: isProduction },
+    // Behind more than one proxy X-Forwarded-For is a chain, which better-auth will not
+    // guess from: without a header it can trust, every client shares one rate-limit bucket.
+    ...(env.CLIENT_IP_HEADER && {
+      advanced: { ipAddress: { ipAddressHeaders: [env.CLIENT_IP_HEADER] } },
+    }),
     plugins: [openAPI()],
   });
 }

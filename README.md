@@ -4,6 +4,8 @@ Doctor Tracker is an admin portal for managing doctors and the patients under th
 
 The frontend lives in a separate repository: `doctor-tracker-frontend`.
 
+**Live:** the API runs at https://doctor-tracker-api.habibium.com, with interactive docs at [`/docs`](https://doctor-tracker-api.habibium.com/docs) and the contract at [`/openapi.json`](https://doctor-tracker-api.habibium.com/openapi.json). The app that uses it is at https://doctor-tracker.habibium.com. Sign-in details are in the submission email.
+
 ## Stack
 
 - **Runtime:** Node.js 24, Express 5, TypeScript
@@ -97,6 +99,7 @@ Stored counters, condition ranks and search tokens are written with the data, ex
 | `API_URL`                                   | Public URL of this API.                                                           |
 | `TRUSTED_ORIGINS`                           | Optional, comma-separated. Extra origins allowed to sign in and call the API.     |
 | `TRUST_PROXY`                               | Number of reverse proxies in front of the API.                                    |
+| `CLIENT_IP_HEADER`                          | Optional. Header holding the caller's address, set by a proxy you trust.          |
 | `PORT`, `LOG_LEVEL`, `NODE_ENV`             | Standard runtime settings.                                                        |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`   | `pnpm seed` only. The first admin; required until an active admin exists.         |
 | `SEED_VIEWER_EMAIL`, `SEED_VIEWER_PASSWORD` | `pnpm seed` only. An optional read-only account.                                  |
@@ -372,6 +375,8 @@ Points worth noting:
 - Every `/api/v1` route requires a session; routes that change data, and every `/users` route, also require the `admin` role. There is no public sign-up.
 - Request data is validated before it reaches a query, and Mongoose runs with `strictQuery: "throw"`, so unknown filter paths are rejected rather than ignored.
 - Sign-in attempts are rate limited in production, and responses carry `helmet` security headers.
+- The limit counts per caller address, and the address has to come from a header a caller cannot forge. Behind more than one proxy `X-Forwarded-For` is a chain, and better-auth refuses to guess from it; left alone, every caller would share one bucket and anyone could lock sign-in for everybody. `CLIENT_IP_HEADER` names the header to trust instead. The hosted API sits behind Cloudflare and uses `cf-connecting-ip`, which Cloudflare overwrites on every request.
+- A known limit of that setup: the browser reaches the API through the Next.js app's rewrite, so for browser traffic the address Cloudflare sees is the web host's, not the visitor's. Browsers are therefore counted per web-host address, while anyone calling the API directly is counted alone. Telling visitors apart would take a header signed by the web host, which is the next step if this faced the open internet at scale.
 
 ## Testing
 
