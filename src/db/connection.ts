@@ -12,7 +12,22 @@ export async function connectDatabase(uri: string) {
 
 /** Idempotent: existing indexes are left alone. */
 export async function ensureIndexes() {
-  await Promise.all([Doctor.createIndexes(), Patient.createIndexes()]);
+  await Promise.all([Doctor.createIndexes(), Patient.createIndexes(), ensureAuthIndexes()]);
+}
+
+/**
+ * better-auth's MongoDB adapter builds none of the indexes its schema declares. These
+ * serve the session lookup on every request and sign-in, and make emails unique, which
+ * better-auth otherwise only checks by reading first. Names follow better-auth's scheme.
+ */
+export async function ensureAuthIndexes() {
+  const collection = (name: string) => mongoose.connection.collection(name);
+  await Promise.all([
+    collection("user").createIndex({ email: 1 }, { name: "user_email_uidx", unique: true }),
+    collection("session").createIndex({ token: 1 }, { name: "session_token_uidx", unique: true }),
+    collection("session").createIndex({ userId: 1 }, { name: "session_userId_idx" }),
+    collection("account").createIndex({ userId: 1 }, { name: "account_userId_idx" }),
+  ]);
 }
 
 /** Also drops indexes the schemas no longer define. For maintenance scripts, not startup. */
