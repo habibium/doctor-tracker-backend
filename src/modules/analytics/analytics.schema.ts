@@ -59,6 +59,25 @@ export const topDoctorsQuery = z.object({
     .meta({ description: "Rank by patients in this condition only" }),
 });
 
+export const diagnosesQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
+const diagnosisName = z.string().trim().min(1).max(200);
+
+export const diagnosisTrendsQuery = z.object({
+  // A single `?diagnosis=` arrives as a string; repeated ones arrive as an array.
+  diagnosis: z
+    .preprocess((value) => (typeof value === "string" ? [value] : value), z.array(diagnosisName))
+    .pipe(z.array(diagnosisName).min(1).max(12))
+    .meta({
+      description: "Exact diagnoses to chart; repeat the parameter for each, up to 12",
+      param: { required: true },
+      override: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 12 },
+    }),
+  timezone: timezoneQuery("Time zone used to group patients into calendar months"),
+});
+
 export const doctorAnalyticsQuery = z.object({
   timezone: timezoneQuery("Time zone used to group patients into months"),
 });
@@ -71,12 +90,23 @@ export const summary = z
     averagePatientsPerDoctor: z.number(),
     criticalPatients: count,
     newDoctors: count,
+    previousNewDoctors: count.meta({
+      description: "Doctors added in the preceding window of the same length",
+    }),
     newPatients: count,
     previousNewPatients: count.meta({
       description: "New patients in the preceding window of the same length",
     }),
   })
   .meta({ id: "AnalyticsSummary" });
+
+export const holiday = z
+  .object({
+    name: z.string(),
+    start: z.iso.date().meta({ description: "First day, inclusive" }),
+    end: z.iso.date().meta({ description: "Last day, inclusive" }),
+  })
+  .meta({ id: "Holiday" });
 
 export const registrations = z
   .object({
@@ -89,6 +119,9 @@ export const registrations = z
         doctors: count,
       }),
     ),
+    holidays: z.array(holiday).meta({
+      description: "Bangladesh public holidays (Dhaka calendar days) that overlap the window",
+    }),
   })
   .meta({ id: "Registrations" });
 
@@ -135,6 +168,69 @@ export const conditionMix = z
   )
   .meta({ id: "ConditionMix" });
 
+export const coverage = z
+  .object({
+    hospitals: z
+      .array(z.object({ name: z.string(), doctors: count, patients: count }))
+      .meta({ description: "Most doctors first" }),
+    specializations: z
+      .array(
+        z.object({
+          name: z.string(),
+          doctors: count,
+          patients: count,
+          hospitals: count.meta({ description: "Hospitals with at least one such doctor" }),
+        }),
+      )
+      .meta({ description: "Most doctors first" }),
+    cells: z
+      .array(
+        z.object({
+          hospital: z.string(),
+          specialization: z.string(),
+          doctors: count,
+          patients: count,
+        }),
+      )
+      .meta({ description: "Only pairs with at least one doctor; any other pair is a gap" }),
+  })
+  .meta({ id: "Coverage" });
+
+export const diagnosisCount = z
+  .object({
+    diagnosis: z.string(),
+    patients: count,
+    last30Days: count.meta({ description: "Registered in the last 30 days" }),
+    previous30Days: count.meta({ description: "Registered in the 30 days before those" }),
+  })
+  .meta({ id: "DiagnosisCount" });
+
+export const diagnosisRanking = z
+  .array(diagnosisCount)
+  .meta({ id: "DiagnosisRanking", description: "Most patients first" });
+
+const monthlyCounts = (description: string) => z.array(count).meta({ description });
+
+export const diagnosisTrends = z
+  .object({
+    year: count.meta({ description: "The current calendar year in the requested time zone" }),
+    month: count.min(1).max(12).meta({ description: "The current month, 1 to 12, still running" }),
+    series: z.array(
+      z.object({
+        diagnosis: z.string(),
+        thisYear: monthlyCounts("New patients from January to the current month"),
+        lastYear: monthlyCounts("New patients in each month of last year, January to December"),
+      }),
+    ),
+    allPatients: z
+      .object({
+        thisYear: monthlyCounts("All new patients from January to the current month"),
+        lastYear: monthlyCounts("All new patients in each month of last year"),
+      })
+      .meta({ description: "Every diagnosis together, the baseline for growth" }),
+  })
+  .meta({ id: "DiagnosisTrends" });
+
 export const specializationBreakdown = z
   .array(z.object({ specialization: z.string(), doctors: count, patients: count }))
   .meta({ id: "SpecializationBreakdown" });
@@ -167,5 +263,8 @@ export const doctorAnalytics = z
       .meta({ description: "The last 12 calendar months, oldest first" }),
     ageGroups: ageGroupCounts,
     genders: genderCounts,
+    diagnoses: z
+      .array(diagnosisCount)
+      .meta({ description: "All of the doctor's diagnoses, most patients first" }),
   })
   .meta({ id: "DoctorAnalytics" });
