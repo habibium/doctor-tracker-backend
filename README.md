@@ -63,6 +63,17 @@ How the seed treats the `SEED_*` variables:
 
 Once the first admin exists, the `SEED_*` lines can be left blank, so no password has to stay in `.env`.
 
+### Demo data
+
+The seed is deterministic: the same names, numbers and dates on every run, relative to the day it runs. It registers patients from 1 January of last year (Dhaka time) to now, so every month this year has the same month a year earlier to compare against.
+
+- **Roster:** 80% of the doctors were on the roster before the history starts and the rest join through it, so intake grows by about a fifth a year rather than tripling. Larger hospitals draw more doctors, BIRDEM is weighted towards endocrinology and ophthalmology and Labaid towards cardiology, and the rarer specializations end up missing at some hospitals: 40 of the 180 hospital and specialization pairs have no doctor.
+- **Seasons:** each diagnosis can have a monthly shape. Dengue rises with the monsoon and peaks from August to October, and 2026's season is heavier than 2025's. Diarrhoeal disease peaks before the monsoon and again late in it; typhoid runs through the hot months; pneumonia, bronchiolitis, asthma and COPD climb in the dry winter.
+- **Holidays:** registrations fall to about a third on Eid days and to half on other public holidays, on top of the quieter Friday and Saturday weekend. The dates are the observed Bangladesh public holidays for 2025 and 2026 (`src/modules/analytics/holidays.ts`), from the government holiday lists and the Eid breaks the cabinet later extended: Eid-ul-Fitr 29 March to 3 April 2025 and 17 to 23 March 2026, Eid-ul-Adha 5 to 14 June 2025 and 25 to 31 May 2026, plus Language Martyrs' Day, Independence Day, Pohela Boishakh, May Day, Buddha Purnima, Ashura, July Mass Uprising Day, Janmashtami, Eid-e-Miladunnabi, Durga Puja, Victory Day and Christmas.
+- **Severity:** strokes, heart failure, cancers, pneumonia and dengue run more critical; acne, cataract or a routine antenatal visit rarely do.
+
+Stored counters, condition ranks and search tokens are written with the data, exactly as the API would.
+
 ### Scripts
 
 | Command                                        | Purpose                                                                  |
@@ -134,7 +145,7 @@ tests/                 Unit and integration tests
 
 ### API conventions
 
-- **Lists** return `{ data: [...], meta: { page, limit, total, totalPages } }` and accept `page`, `limit` (max 100), `search`, `sort`, `from` and `to`.
+- **Lists** return `{ data: [...], meta: { page, limit, total, totalPages } }` and accept `page`, `limit` (max 100), `search`, `sort`, `from` and `to`. Patients also filter by `condition`, `gender`, `doctorId` and an exact `diagnosis`.
 - **Sorting** takes a field, with a leading `-` for descending; the default is `-createdAt`. Doctors sort by `createdAt`, `name`, `specialization`, `hospital` or `patientCount`. Patients sort by `createdAt`, `name`, `age` or `condition`, which orders by severity: `-condition` lists critical patients first. Ties break newest first, and the descending form is the exact reverse.
 - **Time zones:** analytics that group by day, month or hour take an IANA `timezone` (default `UTC`).
 - **Errors** return `{ error: { code, message, details? } }`. Validation failures list every invalid field as `{ path, message }`.
@@ -152,8 +163,8 @@ Doctor responses include `patientCount` and `conditionCounts: { stable, recoveri
 
 | Analytics endpoint                                                  | Returns                                                                       |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `/analytics/summary?range`                                          | Totals, new doctors and patients, and the previous window for comparison      |
-| `/analytics/registrations?range&interval=auto\|day\|month&timezone` | A gap-free series of new patients and doctors; `12m&interval=day` is 365 days |
+| `/analytics/summary?range`                                          | Totals, new doctors and patients, and both counts for the previous window     |
+| `/analytics/registrations?range&interval=auto\|day\|month&timezone` | A gap-free series of new patients and doctors, and the public holidays in it  |
 | `/analytics/intake-hours?range&timezone`                            | All 168 weekday and hour cells (0 is Sunday) and the largest cell             |
 | `/analytics/patients-per-doctor?limit&condition`                    | The busiest doctors, optionally counting one condition only                   |
 | `/analytics/conditions`                                             | Patients per condition                                                        |
@@ -161,9 +172,14 @@ Doctor responses include `patientCount` and `conditionCounts: { stable, recoveri
 | `/analytics/specializations`                                        | Doctors and patients per specialization                                       |
 | `/analytics/workload`                                               | Average, median, p90 and max patients per doctor, and 8 to 12 equal buckets   |
 | `/analytics/demographics`                                           | Patients by gender and age group                                              |
-| `/doctors/{id}/analytics?timezone`                                  | One doctor's conditions, last 12 months, age groups and genders               |
+| `/analytics/coverage`                                               | Doctors and patients for each hospital and specialization pair, with totals   |
+| `/analytics/diagnoses?limit`                                        | Diagnoses by patients in care, with new patients in the last two 30-day spans |
+| `/analytics/diagnosis-trends?diagnosis&timezone`                    | New patients per month for up to 12 diagnoses, this year and all of last year |
+| `/doctors/{id}/analytics?timezone`                                  | One doctor's conditions, last 12 months, age groups, genders and diagnoses    |
 
 `range` is `7d`, `30d`, `90d` or `12m` (365 days), ending now. It defaults to `30d`, except intake hours, which default to `90d`.
+
+`/analytics/coverage` lists only pairs that have a doctor; any other pair is a gap. `/analytics/diagnosis-trends` takes `diagnosis` once per diagnosis and returns `thisYear` from January to the current month (the last still running) and `lastYear` for all twelve, plus the same two series for every patient, which is the growth baseline to read the others against. Holidays are Bangladesh public holidays as Dhaka calendar days; they are reference data, not computed from patients.
 
 **Users.** Every `/users` endpoint needs the `admin` role. A user is `{ id, name, email, role, status, deactivatedAt, createdAt }`, where `status` is `active` or `deactivated`; passwords are never returned.
 
@@ -198,7 +214,7 @@ Search has to feel like type-ahead: typing `rah card` should find Dr. Rahman in 
 
 Instead, each document stores a `searchTokens` array: the lowercase words of its searchable fields (name, specialization, hospital, email, diagnosis) plus the digits of its phone number. The array has an ordinary multikey index. A search splits the input into words and requires each one to prefix-match a token with an anchored, case-sensitive regex, which MongoDB executes as an index range scan.
 
-Measured on the seeded data (300 doctors, 30,000 patients), searching doctors for `rah` examines 23 index keys and 11 documents instead of scanning all 300, and the cost grows with the number of matches rather than the size of the collection.
+Measured on the seeded data (300 doctors, 30,000 patients), searching doctors for `rah` examines 21 index keys and 10 documents instead of scanning all 300, and the cost grows with the number of matches rather than the size of the collection.
 
 The trade-offs are deliberate:
 
@@ -257,13 +273,16 @@ Every list sort is the order of one index, ending in `_id`, so an unfiltered pag
 | `doctor, createdAt, _id`                | One doctor's patients newest first; that doctor's monthly series (covered)                                                                         |
 | `doctor, conditionRank, createdAt, _id` | One doctor's patients by severity or filtered by condition; condition counts per doctor, the condition mix and the condition ranking (all covered) |
 | `conditionRank, createdAt, _id`         | The condition filter, `condition` sorts, the condition breakdown and the critical count                                                            |
+| `diagnosis, createdAt, _id`             | The exact diagnosis filter in date order, with or without a date range; the diagnosis ranking and the monthly diagnosis trends (both covered)      |
 | `name, _id`                             | `name` sorts                                                                                                                                       |
 | `age, createdAt, _id`                   | `age` sorts                                                                                                                                        |
 | `searchTokens`                          | Search                                                                                                                                             |
 
 `conditionRank, createdAt, _id` replaces the earlier index on the condition label. The server only creates missing indexes on startup; `pnpm seed` also drops indexes the code no longer defines.
 
-One doctor's patient list is pinned to the two indexes that start with `doctor`. Left to the planner, a `name` sort for the busiest doctor (476 patients) picks the global `name` index, and once that plan is cached, a doctor with one patient walks the whole name index until MongoDB replans. With the hint, the worst case is that doctor's own rows sorted in memory.
+One doctor's patient list is pinned to the two indexes that start with `doctor`. Left to the planner, a `name` sort for a busy doctor picks the global `name` index, and once that plan is cached, a doctor with one patient walks the whole name index until MongoDB replans. With the hint, the worst case is that doctor's own rows sorted in memory. A diagnosis filter without a doctor is pinned to `diagnosis, createdAt, _id` for the same reason.
+
+The diagnosis index earns its place three times: it serves the list filter the dashboard links to, and it covers both diagnosis analytics. Two other candidates were left out. Hospital, specialization and `patientCount` together would cover the coverage matrix, but every patient write would then update a third index holding the counter, to save reading 300 small documents. `doctor, diagnosis` would cover a doctor's diagnoses, but those are a branch of the demographics pass, which already fetches that doctor's documents.
 
 ### 5. Users through better-auth's internals, not its admin plugin
 
@@ -288,51 +307,61 @@ Plans were captured with `explain("executionStats")` on MongoDB 8 against the se
 
 **Lists**
 
-| Query                                             | Winning plan                                                  | Keys examined | Documents examined |
-| ------------------------------------------------- | ------------------------------------------------------------- | ------------- | ------------------ |
-| Patients, newest first, page 1                    | `IXSCAN createdAt_-1__id_-1`                                  | 10            | 10                 |
-| Patients, page 2000 of 3000                       | `IXSCAN createdAt_-1__id_-1` with skip                        | 20,000        | 10                 |
-| Patients by `-condition` (critical first), page 1 | `IXSCAN conditionRank_1_createdAt_-1__id_-1`, backwards       | 10            | 10                 |
-| Patients by `condition`, page 50                  | `IXSCAN conditionRank_1_createdAt_-1__id_-1` with skip        | 500           | 10                 |
-| Patients by `age`, page 1                         | `IXSCAN age_1_createdAt_-1__id_-1`                            | 10            | 10                 |
-| Patients with `condition=critical`, page 50       | `IXSCAN conditionRank_1_createdAt_-1__id_-1` with skip        | 500           | 10                 |
-| Busiest doctor's patients (476), newest first     | `IXSCAN doctor_1_createdAt_-1__id_-1`                         | 10            | 10                 |
-| Busiest doctor's patients by `-condition`         | `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1`         | 10            | 10                 |
-| Busiest doctor's patients by `name`               | `IXSCAN doctor_1_createdAt_-1__id_-1` (hinted), then `SORT`   | 476           | 476                |
-| Doctors by `-patientCount`, page 1                | `IXSCAN patientCount_1_createdAt_-1__id_-1`, backwards        | 10            | 10                 |
-| Doctors by `patientCount`, last page              | `IXSCAN patientCount_1_createdAt_-1__id_-1` with skip         | 300           | 10                 |
-| Doctors by `-specialization`, page 1              | `IXSCAN specialization_1_createdAt_-1__id_-1`, backwards      | 10            | 10                 |
-| Doctors matching `rah`                            | `IXSCAN searchTokens_1`                                       | 23            | 11                 |
-| Condition counts for a page of 10 doctors         | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 44            | 0                  |
+| Query                                             | Winning plan                                                   | Keys examined | Documents examined |
+| ------------------------------------------------- | -------------------------------------------------------------- | ------------- | ------------------ |
+| Patients, newest first, page 1                    | `IXSCAN createdAt_-1__id_-1`                                   | 10            | 10                 |
+| Patients, page 2000 of 3000                       | `IXSCAN createdAt_-1__id_-1` with skip                         | 20,000        | 10                 |
+| Patients by `-condition` (critical first), page 1 | `IXSCAN conditionRank_1_createdAt_-1__id_-1`, backwards        | 10            | 10                 |
+| Patients by `condition`, page 50                  | `IXSCAN conditionRank_1_createdAt_-1__id_-1` with skip         | 500           | 10                 |
+| Patients by `age`, page 1                         | `IXSCAN age_1_createdAt_-1__id_-1`                             | 10            | 10                 |
+| Patients with `condition=critical`, page 50       | `IXSCAN conditionRank_1_createdAt_-1__id_-1` with skip         | 500           | 10                 |
+| Busiest doctor's patients (332), newest first     | `IXSCAN doctor_1_createdAt_-1__id_-1`                          | 10            | 10                 |
+| Busiest doctor's patients by `-condition`         | `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1`          | 10            | 10                 |
+| Busiest doctor's patients by `name`               | `IXSCAN doctor_1_createdAt_-1__id_-1` (hinted), then `SORT`    | 332           | 332                |
+| Patients with dengue fever (1,783), newest first  | `IXSCAN diagnosis_1_createdAt_-1__id_-1` (hinted)              | 10            | 10                 |
+| Dengue fever registered in October, page 1        | `IXSCAN diagnosis_1_createdAt_-1__id_-1` (hinted)              | 10            | 10                 |
+| Patients with dengue fever by `name`              | `IXSCAN diagnosis_1_createdAt_-1__id_-1` (hinted), then `SORT` | 1,783         | 1,783              |
+| Doctors by `-patientCount`, page 1                | `IXSCAN patientCount_1_createdAt_-1__id_-1`, backwards         | 10            | 10                 |
+| Doctors by `patientCount`, last page              | `IXSCAN patientCount_1_createdAt_-1__id_-1` with skip          | 300           | 10                 |
+| Doctors by `-specialization`, page 1              | `IXSCAN specialization_1_createdAt_-1__id_-1`, backwards       | 10            | 10                 |
+| Doctors matching `rah`                            | `IXSCAN searchTokens_1`                                        | 21            | 10                 |
+| Condition counts for a page of 10 doctors         | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1`  | 76            | 0                  |
 
 **Analytics**
 
-| Query                                         | Winning plan                                                  | Keys examined | Documents examined                  |
-| --------------------------------------------- | ------------------------------------------------------------- | ------------- | ----------------------------------- |
-| Count of critical patients                    | `COUNT_SCAN` on `conditionRank_1_createdAt_-1__id_-1`         | 2,408         | 0                                   |
-| Patients per doctor (top 10)                  | `IXSCAN patientCount_1_createdAt_-1__id_-1`, backwards        | 10            | 10                                  |
-| Patients per doctor, `condition=critical`     | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 2,704         | 0, plus 10 doctors joined by `_id`  |
-| Condition mix by specialization, patient side | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 30,000        | 0, plus each doctor joined by `_id` |
-| Condition mix by specialization, doctor side  | Covered `IXSCAN specialization_1_createdAt_-1__id_-1`         | 300           | 0                                   |
-| Workload                                      | Covered `IXSCAN patientCount_1_createdAt_-1__id_-1`           | 300           | 0                                   |
-| Specializations                               | `COLLSCAN` of doctors, summing `patientCount`                 | 0             | 300                                 |
-| Registrations in the last 30 days             | Covered `IXSCAN createdAt_-1__id_-1`                          | 3,170         | 0                                   |
-| Registrations, 12 months by day               | Covered `IXSCAN createdAt_-1__id_-1`                          | 26,592        | 0                                   |
-| Intake hours, last 90 days                    | Covered `IXSCAN createdAt_-1__id_-1`                          | 9,058         | 0                                   |
-| Busiest doctor's analytics: conditions        | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 476           | 0                                   |
-| Busiest doctor's analytics: last 12 months    | Covered `IXSCAN doctor_1_createdAt_-1__id_-1`                 | 332           | 0                                   |
-| Busiest doctor's analytics: ages and genders  | `IXSCAN doctor_1_createdAt_-1__id_-1`, then `FETCH`           | 476           | 476                                 |
-| Distinct specializations                      | `DISTINCT_SCAN` on `specialization_1_createdAt_-1__id_-1`     | 15            | 0                                   |
+| Query                                                | Winning plan                                                  | Keys examined | Documents examined                  |
+| ---------------------------------------------------- | ------------------------------------------------------------- | ------------- | ----------------------------------- |
+| Count of critical patients                           | `COUNT_SCAN` on `conditionRank_1_createdAt_-1__id_-1`         | 2,794         | 0                                   |
+| New doctors in the previous 30 days                  | `COUNT_SCAN` on `createdAt_-1__id_-1`                         | 7             | 0                                   |
+| Patients per doctor (top 10)                         | `IXSCAN patientCount_1_createdAt_-1__id_-1`, backwards        | 10            | 10                                  |
+| Patients per doctor, `condition=critical`            | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 3,091         | 0, plus 10 doctors joined by `_id`  |
+| Condition mix by specialization, patient side        | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 30,000        | 0, plus each doctor joined by `_id` |
+| Condition mix by specialization, doctor side         | Covered `IXSCAN specialization_1_createdAt_-1__id_-1`         | 300           | 0                                   |
+| Workload                                             | Covered `IXSCAN patientCount_1_createdAt_-1__id_-1`           | 300           | 0                                   |
+| Specializations                                      | `COLLSCAN` of doctors, summing `patientCount`                 | 0             | 300                                 |
+| Coverage, every hospital and specialization pair     | `COLLSCAN` of doctors, summing `patientCount`                 | 0             | 300                                 |
+| Diagnosis ranking, with both 30-day spans            | Covered `IXSCAN diagnosis_1_createdAt_-1__id_-1`              | 30,000        | 0                                   |
+| Diagnosis trends, 9 seasonal diagnoses, 2 years      | Covered `IXSCAN diagnosis_1_createdAt_-1__id_-1`              | 7,448         | 0                                   |
+| Diagnosis trends, dengue fever alone                 | Covered `IXSCAN diagnosis_1_createdAt_-1__id_-1`              | 1,783         | 0                                   |
+| Diagnosis trends, all-patient baseline               | Covered `IXSCAN createdAt_-1__id_-1`                          | 30,000        | 0                                   |
+| Registrations in the last 30 days                    | Covered `IXSCAN createdAt_-1__id_-1`                          | 1,627         | 0                                   |
+| Registrations, 12 months by day                      | Covered `IXSCAN createdAt_-1__id_-1`                          | 17,312        | 0                                   |
+| Intake hours, last 90 days                           | Covered `IXSCAN createdAt_-1__id_-1`                          | 4,767         | 0                                   |
+| Busiest doctor's analytics: conditions               | Covered `IXSCAN doctor_1_conditionRank_1_createdAt_-1__id_-1` | 332           | 0                                   |
+| Busiest doctor's analytics: last 12 months           | Covered `IXSCAN doctor_1_createdAt_-1__id_-1`                 | 173           | 0                                   |
+| Busiest doctor's analytics: ages, genders, diagnoses | `IXSCAN doctor_1_createdAt_-1__id_-1`, then `FETCH`           | 332           | 332                                 |
+| Distinct specializations                             | `DISTINCT_SCAN` on `specialization_1_createdAt_-1__id_-1`     | 15            | 0                                   |
 
 Points worth noting:
 
-- **No collection scans on list pages.** Skipped rows on deep pages are skipped in the index; only the returned rows are fetched. The one `COLLSCAN` above reads the 300 doctors, all of which it needs.
+- **No collection scans on list pages.** Skipped rows on deep pages are skipped in the index; only the returned rows are fetched. The two `COLLSCAN`s above read the 300 doctors, all of which they need; no index holds hospital, specialization and the counter together (see Technical decision 4).
 - **Covered aggregations.** A `$group` on its own scans every document. Adding `$sort` on the indexed fields first lets MongoDB answer from the index alone. Where a filter is on the second key of an index, as in the condition ranking, the pipeline also states that `doctor` is an ObjectId: that bounds the first key, so the scan seeks to each doctor's slice of the condition instead of fetching all 30,000 patients, as the planner otherwise chose.
-- **Bounded per-doctor work.** Every query for one doctor starts with equality on `doctor`, so it reads only that doctor's index range. The doctor detail page reads at most that doctor's patients, never the collection.
+- **Bounded per-doctor work.** Every query for one doctor starts with equality on `doctor`, so it reads only that doctor's index range. The doctor detail page reads at most that doctor's patients, never the collection. Their diagnoses are a third branch of the demographics `$facet`, so they cost no extra read.
+- **Diagnoses from one index.** The ranking has to count every patient, so it reads all 30,000 keys, but no document; its 30-day spans are sums over `createdAt`, which is in the index. The trends bound the scan to the chosen diagnoses since 1 January of last year, so dengue alone reads 1,783 keys. The all-patient baseline beside them reads one `createdAt` key per patient in those two years.
 - **Totals are cheap.** Unfiltered totals use collection metadata; filtered totals are index-only counts that run in parallel with the page query.
 - **No N+1 queries.** Patient counts are stored on the doctor; condition counts for a page of doctors come from one covered aggregation, and doctor details for a page of patients from one `populate`.
 - **Exact percentiles without shipping rows.** The workload endpoint groups doctors by their stored count (one row per distinct count, read from the index), then computes nearest-rank median and p90 and the histogram from those rows.
-- **A deliberate non-index.** `gender` has three values, so it has no index; the query walks the `createdAt` index and filters. Its worst case, the rarest value, examines 1,157 keys for a page.
+- **A deliberate non-index.** `gender` has three values, so it has no index; the query walks the `createdAt` index and filters. Its worst case, the rarest value, examines 1,285 keys for a page.
 
 ## Security
 
@@ -346,13 +375,14 @@ Points worth noting:
 
 ## Testing
 
-`pnpm test` runs 127 tests in about ten seconds. Integration tests start an in-memory MongoDB replica set, sign in real sessions, and cover access control, validation, conflicts, search, filters, every sort key, pagination and each analytics endpoint.
+`pnpm test` runs 139 tests in about ten seconds. Integration tests start an in-memory MongoDB replica set, sign in real sessions, and cover access control, validation, conflicts, search, filters, every sort key, pagination and each analytics endpoint.
 
 - **Users:** every rule in the API conventions above, through real sign-ins: a revoked session gets 401 on its next request, a deactivated user is refused at sign-in, the old password stops working after a reset, and only one of two simultaneous creates with the same email succeeds. Two admins removing each other at once, by demotion, deactivation or deletion, must leave exactly one. Viewers get 403 on every endpoint. The seed's parsing of `SEED_*` and its password rotation are tested too.
 
 - **Counters:** patients are created, moved and deleted through every write endpoint, including failed writes, and 25 concurrent creates for one doctor must end with the exact count. The recount script must repair drifted counters and leave correct ones alone.
 - **Query plans:** every unfiltered sort must walk an index with no in-memory sort or collection scan; the per-page condition counts and the condition ranking must read no documents; each doctor analytics pipeline must stay inside that doctor's index range. Removing an index fails the suite.
-- **Time zones:** intake hours and monthly series are checked against the same instants grouped by `Intl`, in UTC and Asia/Dhaka.
+- **Time zones:** intake hours, monthly series and diagnosis trends are checked against the same instants grouped by `Intl`, in UTC and Asia/Dhaka; a registration at 01:00 on 1 January in Dhaka counts as this year there and last December in UTC.
+- **Insights:** coverage totals and gaps, the diagnosis ranking's 30-day spans, the trends' month split, the holidays returned with a registrations window, and the exact diagnosis filter; the diagnosis aggregations must read no documents and stay inside their diagnoses' index range.
 
 ## Deployment
 
@@ -373,5 +403,5 @@ When upgrading a database seeded before patient counts and condition ranks exist
 - **Deep pagination:** offset paging reads skipped index keys. Past a few hundred thousand rows, switch the lists to keyset pagination on `(createdAt, _id)`, which the existing indexes already support.
 - **Dashboard load:** the analytics endpoints are independent and read-only, so they can be cached for a short time or served from a read replica.
 - **Patient counts:** done; see Technical decision 3. The counter's cost grows with the write rate for a single doctor, not with the size of the collection. If one doctor ever received writes faster than transactions on its document can commit, the counter could be split into a few sub-counters per doctor, summed on read.
-- **Long time series:** registrations and intake hours read one index key per patient in the window (26,592 for a year of daily points here). At millions of patients, roll each day's counts into a summary collection with `$merge` and read that instead.
+- **Long time series:** registrations, intake hours and the trends baseline read one index key per patient in the window (17,312 for a year of daily points here, 30,000 for the two years of trends). At millions of patients, roll each day's counts per diagnosis into a summary collection with `$merge` and read that instead; the diagnosis ranking would read the same roll-up.
 - **Search:** move to Atlas Search when fuzzy or relevance-ranked matching is needed.
