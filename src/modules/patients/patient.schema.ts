@@ -22,6 +22,17 @@ export const patientCondition = z.enum(PATIENT_CONDITIONS).meta({ id: "PatientCo
 export type PatientCondition = z.infer<typeof patientCondition>;
 export const gender = z.enum(GENDERS).meta({ id: "Gender" });
 
+const patientTotal = z.number().int();
+export const conditionCounts = z
+  .object({
+    stable: patientTotal,
+    recovering: patientTotal,
+    under_observation: patientTotal,
+    critical: patientTotal,
+  } satisfies Record<PatientCondition, z.ZodType>)
+  .meta({ id: "ConditionCounts", description: "Patients in each condition, zeros included" });
+export type ConditionCounts = z.infer<typeof conditionCounts>;
+
 export const patientFields = z.object({
   name: z.string().trim().min(2).max(120),
   age: z.number().int().min(0).max(130),

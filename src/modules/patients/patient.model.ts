@@ -2,6 +2,7 @@ import { model, Schema, type Types } from "mongoose";
 import type { SortSpec } from "../../lib/query.ts";
 import { phoneTokens, tokenize } from "../../lib/search.ts";
 import {
+  type ConditionCounts,
   GENDERS,
   PATIENT_CONDITIONS,
   type PatientCondition,
@@ -16,6 +17,16 @@ export const CONDITION_RANK = {
   under_observation: 3,
   critical: 4,
 } as const satisfies Record<PatientCondition, number>;
+
+/** Zero-filled counts per condition from aggregation rows keyed by conditionRank. */
+export function countsByCondition(byRank: ReadonlyMap<number, number>): ConditionCounts {
+  return {
+    stable: byRank.get(CONDITION_RANK.stable) ?? 0,
+    recovering: byRank.get(CONDITION_RANK.recovering) ?? 0,
+    under_observation: byRank.get(CONDITION_RANK.under_observation) ?? 0,
+    critical: byRank.get(CONDITION_RANK.critical) ?? 0,
+  };
+}
 
 export interface PatientAttrs extends PatientFields {
   doctor: Types.ObjectId;
@@ -47,6 +58,8 @@ const patientSchema = new Schema<PatientAttrs>(
 
 patientSchema.index({ createdAt: -1, _id: -1 });
 patientSchema.index({ doctor: 1, createdAt: -1, _id: -1 });
+// Also covers per-doctor condition counts, which read only these two keys.
+patientSchema.index({ doctor: 1, conditionRank: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ conditionRank: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ name: 1, _id: 1 });
 patientSchema.index({ age: 1, createdAt: -1, _id: -1 });

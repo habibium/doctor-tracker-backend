@@ -133,4 +133,16 @@ describe("unfiltered list plans", () => {
       await Patient.find().sort(sortSpec(PATIENT_SORTS, sort)).limit(10).explain("queryPlanner"),
     );
   });
+
+  it.each(["condition", "-condition"] as const)(
+    "walks an index for one doctor's patients by %s",
+    async (sort) => {
+      expectIndexOrder(
+        await Patient.find({ doctor: doctors.B })
+          .sort(sortSpec(PATIENT_SORTS, sort))
+          .limit(10)
+          .explain("queryPlanner"),
+      );
+    },
+  );
 });

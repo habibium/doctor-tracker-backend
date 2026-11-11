@@ -1,8 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { recountPatients } from "../src/db/maintenance.ts";
 import { Doctor } from "../src/modules/doctors/doctor.model.ts";
+import { conditionCountsPipeline } from "../src/modules/doctors/doctor.service.ts";
 import { Patient } from "../src/modules/patients/patient.model.ts";
-import { doctorInput, patientInput, startTestApp, type TestApp } from "./helpers.ts";
+import {
+  docsExamined,
+  doctorInput,
+  patientInput,
+  planNodes,
+  startTestApp,
+  type TestApp,
+} from "./helpers.ts";
 
 let ctx: TestApp;
 let first: string;
@@ -116,5 +124,52 @@ describe("recount", () => {
     expect(await recountPatients()).toEqual({ doctorsCorrected: 2 });
     expect(await Doctor.find().select("patientCount").lean()).toEqual(expected);
     expect(await recountPatients()).toEqual({ doctorsCorrected: 0 });
+  });
+});
+
+describe("condition counts", () => {
+  let doctorId: string;
+
+  beforeAll(async () => {
+    doctorId = await createDoctor("conditions@x.dev");
+    for (const condition of ["critical", "critical", "stable", "recovering"]) {
+      await ctx.admin
+        .post(`/api/v1/doctors/${doctorId}/patients`)
+        .send(patientInput({ condition }))
+        .expect(201);
+    }
+  });
+
+  it("returns zero-filled counts on the detail and the list", async () => {
+    const expected = { stable: 1, recovering: 1, under_observation: 0, critical: 2 };
+    const detail = await ctx.admin.get(`/api/v1/doctors/${doctorId}`).expect(200);
+    expect(detail.body).toMatchObject({ patientCount: 4, conditionCounts: expected });
+
+    const list = await ctx.admin.get("/api/v1/doctors?sort=-patientCount&limit=100").expect(200);
+    const row = list.body.data.find((doctor: { id: string }) => doctor.id === doctorId);
+    expect(row.conditionCounts).toEqual(expected);
+    const empty = list.body.data.find((doctor: { id: string }) => doctor.id === first);
+    expect(empty.conditionCounts).toEqual({
+      stable: 0,
+      recovering: 0,
+      under_observation: 0,
+      critical: 0,
+    });
+  });
+
+  it("is a covered index scan for a page of doctors", async () => {
+    const ids = (await Doctor.find().select("_id").lean()).map((doctor) => doctor._id);
+    const explained = await Patient.aggregate(conditionCountsPipeline(ids)).explain(
+      "executionStats",
+    );
+    const stages = planNodes(explained).map((node) => node.stage);
+
+    expect(stages).toContain("IXSCAN");
+    expect(stages).not.toContain("FETCH");
+    expect(stages).not.toContain("SORT");
+    expect(planNodes(explained).find((node) => node.stage === "IXSCAN")?.indexName).toBe(
+      "doctor_1_conditionRank_1_createdAt_-1__id_-1",
+    );
+    expect(docsExamined(explained)).toBe(0);
   });
 });

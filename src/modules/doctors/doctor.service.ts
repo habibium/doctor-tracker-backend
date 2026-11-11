@@ -1,7 +1,9 @@
-import type { ClientSession, Types } from "mongoose";
+import { type ClientSession, type PipelineStage, Types } from "mongoose";
 import { conflict, notFound } from "../../lib/errors.ts";
 import { countMatching, dateRange, page, sortSpec } from "../../lib/query.ts";
 import { searchFilter } from "../../lib/search.ts";
+import { countsByCondition, Patient } from "../patients/patient.model.ts";
+import type { ConditionCounts } from "../patients/patient.schema.ts";
 import { Doctor, DOCTOR_SORTS, type DoctorAttrs } from "./doctor.model.ts";
 import type {
   DoctorDto,
@@ -18,7 +20,9 @@ export type DoctorSummary = Pick<DoctorAttrs, "name" | "specialization" | "hospi
   _id: Types.ObjectId;
 };
 
-function toDto(doc: DoctorRecord): DoctorDto {
+const NO_PATIENTS = countsByCondition(new Map());
+
+function toDto(doc: DoctorRecord, conditionCounts: ConditionCounts): DoctorDto {
   return {
     id: String(doc._id),
     name: doc.name,
@@ -27,8 +31,37 @@ function toDto(doc: DoctorRecord): DoctorDto {
     phone: doc.phone,
     email: doc.email,
     patientCount: doc.patientCount,
+    conditionCounts,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+/** Reads only `doctor` and `conditionRank`, so it is a covered scan of the index on both. */
+export function conditionCountsPipeline(doctorIds: Types.ObjectId[]): PipelineStage[] {
+  return [
+    { $match: { doctor: { $in: doctorIds } } },
+    { $sort: { doctor: 1, conditionRank: 1 } },
+    { $group: { _id: { doctor: "$doctor", rank: "$conditionRank" }, patients: { $sum: 1 } } },
+  ];
+}
+
+/** One aggregation for a whole page of doctors; returns a lookup by doctor id. */
+async function conditionCountsOf(doctorIds: Types.ObjectId[]) {
+  const rows = doctorIds.length
+    ? await Patient.aggregate<{ _id: { doctor: Types.ObjectId; rank: number }; patients: number }>(
+        conditionCountsPipeline(doctorIds),
+      )
+    : [];
+
+  const byDoctor = new Map<string, Map<number, number>>();
+  for (const { _id, patients } of rows) {
+    const ranks = byDoctor.get(String(_id.doctor)) ?? new Map<number, number>();
+    byDoctor.set(String(_id.doctor), ranks.set(_id.rank, patients));
+  }
+  return (doctorId: Types.ObjectId) => {
+    const ranks = byDoctor.get(String(doctorId));
+    return ranks ? countsByCondition(ranks) : NO_PATIENTS;
   };
 }
 
@@ -50,7 +83,12 @@ export async function listDoctors(query: ListDoctorsQuery) {
     countMatching(Doctor, filter),
   ]);
 
-  return page(docs.map(toDto), total, query);
+  const countsOf = await conditionCountsOf(docs.map((doc) => doc._id));
+  return page(
+    docs.map((doc) => toDto(doc, countsOf(doc._id))),
+    total,
+    query,
+  );
 }
 
 export async function getDoctorFilters() {
@@ -62,13 +100,16 @@ export async function getDoctorFilters() {
 }
 
 export async function getDoctor(id: string) {
-  const doc = await Doctor.findById(id).lean();
+  const [doc, countsOf] = await Promise.all([
+    Doctor.findById(id).lean(),
+    conditionCountsOf([new Types.ObjectId(id)]),
+  ]);
   if (!doc) throw notFound("Doctor");
-  return toDto(doc);
+  return toDto(doc, countsOf(doc._id));
 }
 
 export async function createDoctor(fields: DoctorFields) {
-  return toDto(await Doctor.create(fields));
+  return toDto(await Doctor.create(fields), NO_PATIENTS);
 }
 
 export async function updateDoctor(id: string, changes: UpdateDoctorBody) {
@@ -78,7 +119,8 @@ export async function updateDoctor(id: string, changes: UpdateDoctorBody) {
   // save() rather than updateOne() so the pre-save hook rebuilds the search tokens.
   doc.set(changes);
   await doc.save();
-  return toDto(doc);
+  const countsOf = await conditionCountsOf([doc._id]);
+  return toDto(doc, countsOf(doc._id));
 }
 
 export async function deleteDoctor(id: string) {

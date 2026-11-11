@@ -9,6 +9,7 @@ import {
   timestamp,
 } from "../../lib/schemas.ts";
 import { sortParams } from "../../lib/query.ts";
+import { conditionCounts } from "../patients/patient.schema.ts";
 
 export const doctorFields = z.object({
   name: z.string().trim().min(2).max(120),
@@ -31,6 +32,7 @@ export const doctor = doctorFields
   .extend({
     id: objectId,
     patientCount: z.number().int(),
+    conditionCounts,
     createdAt: timestamp,
     updatedAt: timestamp,
   })

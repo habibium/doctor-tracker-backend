@@ -46,6 +46,9 @@ export function planNodes(explain: unknown): PlanNode[] {
 
 export const planStages = (explain: unknown) => planNodes(explain).map((node) => node.stage);
 
+export const docsExamined = (explain: unknown) =>
+  (explain as { executionStats: { totalDocsExamined: number } }).executionStats.totalDocsExamined;
+
 export async function startTestApp() {
   const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   const connection = await connectDatabase(mongo.getUri("doctor-tracker-test"));
