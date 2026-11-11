@@ -1,7 +1,14 @@
 import { defineRoute } from "../../lib/route.ts";
+import { idParams } from "../../lib/schemas.ts";
 import {
   conditionBreakdown,
+  conditionMix,
+  conditionMixQuery,
   demographics,
+  doctorAnalytics,
+  doctorAnalyticsQuery,
+  intakeHours,
+  intakeHoursQuery,
   patientsPerDoctor,
   registrations,
   registrationsQuery,
@@ -9,6 +16,7 @@ import {
   summary,
   summaryQuery,
   topDoctorsQuery,
+  workload,
 } from "./analytics.schema.ts";
 import * as analytics from "./analytics.service.ts";
 
@@ -35,7 +43,22 @@ export const analyticsRoutes = [
     request: { query: registrationsQuery },
     response: { status: 200, description: "A gap-free time series", schema: registrations },
     errors: [400],
-    handler: ({ query }) => analytics.getRegistrations(query.range, query.timezone),
+    handler: ({ query }) => analytics.getRegistrations(query.range, query.interval, query.timezone),
+  }),
+  defineRoute({
+    method: "get",
+    path: "/analytics/intake-hours",
+    operationId: "getIntakeHours",
+    summary: "Patient registrations by weekday and hour",
+    tag,
+    request: { query: intakeHoursQuery },
+    response: {
+      status: 200,
+      description: "A complete weekday by hour grid",
+      schema: intakeHours,
+    },
+    errors: [400],
+    handler: ({ query }) => analytics.getIntakeHours(query.range, query.timezone),
   }),
   defineRoute({
     method: "get",
@@ -50,7 +73,7 @@ export const analyticsRoutes = [
       schema: patientsPerDoctor,
     },
     errors: [400],
-    handler: ({ query }) => analytics.getPatientsPerDoctor(query.limit),
+    handler: ({ query }) => analytics.getPatientsPerDoctor(query.limit, query.condition),
   }),
   defineRoute({
     method: "get",
@@ -67,6 +90,21 @@ export const analyticsRoutes = [
   }),
   defineRoute({
     method: "get",
+    path: "/analytics/condition-mix",
+    operationId: "getConditionMix",
+    summary: "Patients in each condition per specialization or hospital",
+    tag,
+    request: { query: conditionMixQuery },
+    response: {
+      status: 200,
+      description: "One row per specialization or hospital, most patients first",
+      schema: conditionMix,
+    },
+    errors: [400],
+    handler: ({ query }) => analytics.getConditionMix(query.by),
+  }),
+  defineRoute({
+    method: "get",
     path: "/analytics/specializations",
     operationId: "getSpecializationBreakdown",
     summary: "Doctors and patients by specialization",
@@ -80,11 +118,35 @@ export const analyticsRoutes = [
   }),
   defineRoute({
     method: "get",
+    path: "/analytics/workload",
+    operationId: "getWorkload",
+    summary: "How patients are spread across doctors",
+    tag,
+    response: {
+      status: 200,
+      description: "Summary statistics and a histogram of patients per doctor",
+      schema: workload,
+    },
+    handler: () => analytics.getWorkload(),
+  }),
+  defineRoute({
+    method: "get",
     path: "/analytics/demographics",
     operationId: "getDemographics",
     summary: "Patients by gender and age group",
     tag,
     response: { status: 200, description: "Gender and age distribution", schema: demographics },
     handler: () => analytics.getDemographics(),
+  }),
+  defineRoute({
+    method: "get",
+    path: "/doctors/{id}/analytics",
+    operationId: "getDoctorAnalytics",
+    summary: "Condition, intake and demographic breakdown for one doctor",
+    tag,
+    request: { params: idParams, query: doctorAnalyticsQuery },
+    response: { status: 200, description: "The doctor's analytics", schema: doctorAnalytics },
+    errors: [400, 404],
+    handler: ({ params, query }) => analytics.getDoctorAnalytics(params.id, query.timezone),
   }),
 ];

@@ -1,10 +1,19 @@
-import type { PipelineStage, Types } from "mongoose";
-import { Doctor } from "../doctors/doctor.model.ts";
-import { CONDITION_RANK, Patient } from "../patients/patient.model.ts";
-import { GENDERS, PATIENT_CONDITIONS } from "../patients/patient.schema.ts";
-import type { Range } from "./analytics.schema.ts";
+import { type PipelineStage, Types } from "mongoose";
+import { notFound } from "../../lib/errors.ts";
+import { sortSpec } from "../../lib/query.ts";
+import { Doctor, DOCTOR_SORTS } from "../doctors/doctor.model.ts";
+import { DOCTOR_SUMMARY } from "../doctors/doctor.service.ts";
+import { CONDITION_RANK, countsByCondition, Patient } from "../patients/patient.model.ts";
+import {
+  type ConditionCounts,
+  GENDERS,
+  PATIENT_CONDITIONS,
+  type PatientCondition,
+} from "../patients/patient.schema.ts";
+import type { Grouping, Interval, Range } from "./analytics.schema.ts";
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, "12m": 365 };
 
 /**
@@ -14,10 +23,18 @@ const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, "12m"
 const INDEX_ORDER = {
   doctor: { $sort: { doctor: 1 } },
   conditionRank: { $sort: { conditionRank: 1 } },
+  doctorAndCondition: { $sort: { doctor: 1, conditionRank: 1 } },
 } satisfies Record<string, PipelineStage>;
 
 const AGE_BOUNDARIES = [0, 13, 18, 31, 46, 61] as const;
 const AGE_LABELS = ["0-12", "13-17", "18-30", "31-45", "46-60", "61+"];
+
+const WORKLOAD_BUCKETS = { min: 8, max: 12 };
+/** Widths that read well on an axis. Neighbours differ by at most 1.5x, so 8 to 12 buckets fit. */
+const NICE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8];
+
+const oneDecimal = (total: number, count: number) =>
+  count ? Math.round((total / count) * 10) / 10 : 0;
 
 export async function getSummary(range: Range) {
   const span = RANGE_DAYS[range] * DAY_MS;
@@ -45,9 +62,7 @@ export async function getSummary(range: Range) {
     range,
     totalDoctors,
     totalPatients,
-    averagePatientsPerDoctor: totalDoctors
-      ? Math.round((totalPatients / totalDoctors) * 10) / 10
-      : 0,
+    averagePatientsPerDoctor: oneDecimal(totalPatients, totalDoctors),
     criticalPatients,
     newDoctors,
     newPatients,
@@ -55,8 +70,11 @@ export async function getSummary(range: Range) {
   };
 }
 
+const isoDay = (year: number, monthIndex: number, day: number) =>
+  new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
+
 /** Calendar buckets ending today in the caller's time zone, oldest first. */
-function buckets(range: Range, timeZone: string) {
+function calendar(range: Range, interval: Interval, timeZone: string) {
   const [year = 0, month = 0, day = 0] = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -67,47 +85,69 @@ function buckets(range: Range, timeZone: string) {
     .split("-")
     .map(Number);
 
-  if (range === "12m") {
-    const labels = Array.from({ length: 12 }, (_, i) =>
-      new Date(Date.UTC(year, month - 12 + i, 1)).toISOString().slice(0, 7),
+  const resolved = interval === "auto" ? (range === "12m" ? "month" : "day") : interval;
+  const days = RANGE_DAYS[range];
+
+  if (resolved === "day") {
+    const labels = Array.from({ length: days }, (_, i) =>
+      isoDay(year, month - 1, day - days + 1 + i),
     );
-    return { interval: "month" as const, format: "%Y-%m", labels, first: `${labels[0]}-01` };
+    return { interval: resolved, labels, firstDay: labels[0] as string };
   }
 
-  const days = RANGE_DAYS[range];
-  const labels = Array.from({ length: days }, (_, i) =>
-    new Date(Date.UTC(year, month - 1, day - days + 1 + i)).toISOString().slice(0, 10),
+  // 12m by month is the last 12 whole months; shorter ranges cover the months their days touch.
+  const firstDay =
+    range === "12m" ? isoDay(year, month - 12, 1) : isoDay(year, month - 1, day - days + 1);
+  const [firstYear = 0, firstMonth = 0] = firstDay.split("-").map(Number);
+  const labels = Array.from({ length: (year - firstYear) * 12 + month - firstMonth + 1 }, (_, i) =>
+    isoDay(firstYear, firstMonth - 1 + i, 1).slice(0, 7),
   );
-  return { interval: "day" as const, format: "%Y-%m-%d", labels, first: labels[0] as string };
+  return { interval: resolved, labels, firstDay };
 }
 
-export async function getRegistrations(range: Range, timezone: string) {
-  const { interval, format, labels, first } = buckets(range, timezone);
+type DayRow = { _id: string; count: number };
 
-  // UTC midnight minus the largest zone offset (+14h) is at or before the first local bucket;
-  // rows that land in an earlier bucket are dropped when mapping onto `labels`.
-  const since = new Date(Date.parse(first) - 14 * 3_600_000);
-  const pipeline: PipelineStage[] = [
-    { $match: { createdAt: { $gte: since } } },
+/** Counts per local calendar day. Reads only `createdAt` beyond `match`, so it can be covered. */
+function byLocalDay(match: Record<string, unknown>, firstDay: string, timezone: string) {
+  // UTC midnight minus the largest zone offset (+14h) is at or before local midnight anywhere;
+  // rows from those extra hours fall before `firstDay` and are dropped in onLabels().
+  const since = new Date(Date.parse(firstDay) - 14 * HOUR_MS);
+  return [
+    { $match: { ...match, createdAt: { $gte: since } } },
     {
       $group: {
-        _id: { $dateToString: { date: "$createdAt", format, timezone } },
+        _id: { $dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone } },
         count: { $sum: 1 },
       },
     },
-  ];
+  ] satisfies PipelineStage[];
+}
 
-  type Row = { _id: string; count: number };
+/** Every label present, gaps as zero; day rows roll up into month labels. */
+function onLabels(rows: DayRow[], labels: string[], firstDay: string) {
+  const counts = new Map(labels.map((label) => [label, 0]));
+  const width = labels[0]?.length ?? firstDay.length;
+  for (const row of rows) {
+    if (row._id < firstDay) continue;
+    const label = row._id.slice(0, width);
+    counts.set(label, (counts.get(label) ?? 0) + row.count);
+  }
+  return counts;
+}
+
+export async function getRegistrations(range: Range, interval: Interval, timezone: string) {
+  const { interval: resolved, labels, firstDay } = calendar(range, interval, timezone);
+  const pipeline = byLocalDay({}, firstDay, timezone);
   const [patients, doctors] = await Promise.all([
-    Patient.aggregate<Row>(pipeline),
-    Doctor.aggregate<Row>(pipeline),
+    Patient.aggregate<DayRow>(pipeline),
+    Doctor.aggregate<DayRow>(pipeline),
   ]);
-  const patientCounts = new Map(patients.map((row) => [row._id, row.count]));
-  const doctorCounts = new Map(doctors.map((row) => [row._id, row.count]));
+  const patientCounts = onLabels(patients, labels, firstDay);
+  const doctorCounts = onLabels(doctors, labels, firstDay);
 
   return {
     range,
-    interval,
+    interval: resolved,
     points: labels.map((date) => ({
       date,
       patients: patientCounts.get(date) ?? 0,
@@ -116,12 +156,59 @@ export async function getRegistrations(range: Range, timezone: string) {
   };
 }
 
-export async function getPatientsPerDoctor(limit: number) {
+export async function getIntakeHours(range: Range, timezone: string) {
+  const since = new Date(Date.now() - RANGE_DAYS[range] * DAY_MS);
+  const rows = await Patient.aggregate<{
+    _id: { weekday: number; hour: number };
+    patients: number;
+  }>([
+    { $match: { createdAt: { $gte: since } } },
+    {
+      $group: {
+        _id: {
+          weekday: { $dayOfWeek: { date: "$createdAt", timezone } },
+          hour: { $hour: { date: "$createdAt", timezone } },
+        },
+        patients: { $sum: 1 },
+      },
+    },
+  ]);
+
+  // $dayOfWeek counts Sunday as 1.
+  const counts = new Map(
+    rows.map(({ _id, patients }) => [(_id.weekday - 1) * 24 + _id.hour, patients]),
+  );
+  const cells = Array.from({ length: 7 * 24 }, (_, i) => ({
+    weekday: Math.floor(i / 24),
+    hour: i % 24,
+    patients: counts.get(i) ?? 0,
+  }));
+  return { range, cells, max: Math.max(...cells.map((cell) => cell.patients)) };
+}
+
+export async function getPatientsPerDoctor(limit: number, condition?: PatientCondition) {
+  if (!condition) {
+    // Straight off the stored counter's index: `limit` keys and documents, no patient read.
+    const doctors = await Doctor.find({ patientCount: { $gt: 0 } })
+      .select(`${DOCTOR_SUMMARY} patientCount`)
+      .sort(sortSpec(DOCTOR_SORTS, "-patientCount"))
+      .limit(limit)
+      .lean();
+    return doctors.map((doctor) => ({
+      doctorId: String(doctor._id),
+      name: doctor.name,
+      specialization: doctor.specialization,
+      hospital: doctor.hospital,
+      patients: doctor.patientCount,
+    }));
+  }
+
   const rows = await Patient.aggregate<{
     _id: Types.ObjectId;
     patients: number;
     doctor: { name: string; specialization: string; hospital: string };
   }>([
+    { $match: { conditionRank: CONDITION_RANK[condition] } },
     INDEX_ORDER.doctor,
     { $group: { _id: "$doctor", patients: { $sum: 1 } } },
     { $sort: { patients: -1, _id: 1 } },
@@ -153,75 +240,215 @@ export async function getConditionBreakdown() {
     INDEX_ORDER.conditionRank,
     { $group: { _id: "$conditionRank", patients: { $sum: 1 } } },
   ]);
-  const counts = new Map(rows.map((row) => [row._id, row.patients]));
-  return PATIENT_CONDITIONS.map((condition) => ({
-    condition,
-    patients: counts.get(CONDITION_RANK[condition]) ?? 0,
-  }));
+  const counts = countsByCondition(new Map(rows.map((row) => [row._id, row.patients])));
+  return PATIENT_CONDITIONS.map((condition) => ({ condition, patients: counts[condition] }));
 }
 
 export async function getSpecializationBreakdown() {
-  type Row = { _id: string; count: number };
-  const [doctors, patients] = await Promise.all([
-    Doctor.aggregate<Row>([{ $group: { _id: "$specialization", count: { $sum: 1 } } }]),
-    Patient.aggregate<Row>([
-      INDEX_ORDER.doctor,
-      // Collapse to one row per doctor first, so the join runs per doctor, not per patient.
-      { $group: { _id: "$doctor", count: { $sum: 1 } } },
-      {
-        $lookup: {
-          from: Doctor.collection.name,
-          localField: "_id",
-          foreignField: "_id",
-          as: "doctor",
-          pipeline: [{ $project: { specialization: 1 } }],
-        },
-      },
-      { $unwind: "$doctor" },
-      { $group: { _id: "$doctor.specialization", count: { $sum: "$count" } } },
-    ]),
-  ]);
-  const patientCounts = new Map(patients.map((row) => [row._id, row.count]));
-
-  return doctors
-    .map((row) => ({
-      specialization: row._id,
-      doctors: row.count,
-      patients: patientCounts.get(row._id) ?? 0,
-    }))
-    .sort((a, b) => b.patients - a.patients || a.specialization.localeCompare(b.specialization));
-}
-
-export async function getDemographics() {
-  // $facet feeds both groupings from a single pass over the collection.
-  const [result] = await Patient.aggregate<{
-    genders: { _id: string; patients: number }[];
-    ages: { _id: number; patients: number }[];
-  }>([
+  // The stored counters make this one pass over the doctors; no patient is read.
+  const rows = await Doctor.aggregate<{ _id: string; doctors: number; patients: number }>([
     {
-      $facet: {
-        genders: [{ $group: { _id: "$gender", patients: { $sum: 1 } } }],
-        ages: [
-          {
-            $bucket: {
-              groupBy: "$age",
-              boundaries: [...AGE_BOUNDARIES, 131],
-              output: { patients: { $sum: 1 } },
-            },
-          },
-        ],
+      $group: {
+        _id: "$specialization",
+        doctors: { $sum: 1 },
+        patients: { $sum: "$patientCount" },
       },
     },
   ]);
+  return rows
+    .map(({ _id, doctors, patients }) => ({ specialization: _id, doctors, patients }))
+    .sort((a, b) => b.patients - a.patients || a.specialization.localeCompare(b.specialization));
+}
 
+/** The patient side of the condition mix; exported so tests can check its plan. */
+export function conditionMixPipeline(by: Grouping): PipelineStage[] {
+  const perCondition = (accumulator: (condition: PatientCondition) => unknown) =>
+    Object.fromEntries(PATIENT_CONDITIONS.map((condition) => [condition, accumulator(condition)]));
+
+  return [
+    INDEX_ORDER.doctorAndCondition,
+    // A covered scan collapses patients to one row per doctor, so the join runs per doctor.
+    {
+      $group: {
+        _id: "$doctor",
+        ...perCondition((condition) => ({
+          $sum: { $cond: [{ $eq: ["$conditionRank", CONDITION_RANK[condition]] }, 1, 0] },
+        })),
+      },
+    },
+    {
+      $lookup: {
+        from: Doctor.collection.name,
+        localField: "_id",
+        foreignField: "_id",
+        as: "doctor",
+        pipeline: [{ $project: { [by]: 1 } }],
+      },
+    },
+    { $unwind: "$doctor" },
+    {
+      $group: {
+        _id: `$doctor.${by}`,
+        ...perCondition((condition) => ({ $sum: `$${condition}` })),
+      },
+    },
+  ];
+}
+
+export async function getConditionMix(by: Grouping) {
+  const [doctorRows, patientRows] = await Promise.all([
+    Doctor.aggregate<{ _id: string; doctors: number }>([
+      { $sort: { [by]: 1 } },
+      { $group: { _id: `$${by}`, doctors: { $sum: 1 } } },
+    ]),
+    Patient.aggregate<{ _id: string } & ConditionCounts>(conditionMixPipeline(by)),
+  ]);
+  const byKey = new Map(patientRows.map((row) => [row._id, row]));
+
+  return doctorRows
+    .map(({ _id: key, doctors }) => {
+      const row = byKey.get(key);
+      const counts = {
+        stable: row?.stable ?? 0,
+        recovering: row?.recovering ?? 0,
+        under_observation: row?.under_observation ?? 0,
+        critical: row?.critical ?? 0,
+      } satisfies ConditionCounts;
+      const patients = PATIENT_CONDITIONS.reduce((sum, condition) => sum + counts[condition], 0);
+      return { key, doctors, patients, ...counts };
+    })
+    .sort((a, b) => b.patients - a.patients || a.key.localeCompare(b.key));
+}
+
+/** The narrowest round width that fits 0 to `max` in at most 12 buckets, padded to at least 8. */
+export function bucketLayout(max: number) {
+  for (let scale = 1; ; scale *= 10) {
+    for (const step of NICE_STEPS) {
+      const width = step * scale;
+      const needed = Math.ceil((max + 1) / width);
+      if (Number.isInteger(width) && needed <= WORKLOAD_BUCKETS.max) {
+        return { width, count: Math.max(WORKLOAD_BUCKETS.min, needed) };
+      }
+    }
+  }
+}
+
+export async function getWorkload() {
+  // One row per distinct count, from the patientCount index alone: exact percentiles
+  // without shipping every doctor to the API.
+  const rows = await Doctor.aggregate<{ _id: number; doctors: number }>([
+    { $sort: { patientCount: 1 } },
+    { $group: { _id: "$patientCount", doctors: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]);
+
+  const doctors = rows.reduce((sum, row) => sum + row.doctors, 0);
+  const total = rows.reduce((sum, row) => sum + row._id * row.doctors, 0);
+  const max = rows.at(-1)?._id ?? 0;
+
+  const nearestRank = (p: number) => {
+    const rank = Math.ceil(p * doctors);
+    let seen = 0;
+    for (const row of rows) {
+      seen += row.doctors;
+      if (seen >= rank) return row._id;
+    }
+    return 0;
+  };
+
+  const { width, count } = bucketLayout(max);
+  const buckets = Array.from({ length: count }, (_, i) => ({
+    min: i * width,
+    max: (i + 1) * width - 1,
+    doctors: 0,
+  }));
+  for (const row of rows) {
+    const bucket = buckets[Math.floor(row._id / width)];
+    if (bucket) bucket.doctors += row.doctors;
+  }
+
+  return {
+    doctors,
+    average: oneDecimal(total, doctors),
+    median: nearestRank(0.5),
+    p90: nearestRank(0.9),
+    max,
+    buckets,
+  };
+}
+
+/** Feeds both groupings from one pass. */
+const DEMOGRAPHICS_FACET: PipelineStage = {
+  $facet: {
+    genders: [{ $group: { _id: "$gender", patients: { $sum: 1 } } }],
+    ages: [
+      {
+        $bucket: {
+          groupBy: "$age",
+          boundaries: [...AGE_BOUNDARIES, 131],
+          output: { patients: { $sum: 1 } },
+        },
+      },
+    ],
+  },
+};
+
+type DemographicsRow = {
+  genders: { _id: string; patients: number }[];
+  ages: { _id: number; patients: number }[];
+};
+
+function toDemographics(result: DemographicsRow | undefined) {
   const genderCounts = new Map(result?.genders.map((row) => [row._id, row.patients]));
   const ageCounts = new Map(result?.ages.map((row) => [row._id, row.patients]));
-
   return {
     genders: GENDERS.map((gender) => ({ gender, patients: genderCounts.get(gender) ?? 0 })),
     ageGroups: AGE_BOUNDARIES.map((lower, i) => ({
       group: AGE_LABELS[i] as string,
       patients: ageCounts.get(lower) ?? 0,
     })),
+  };
+}
+
+export async function getDemographics() {
+  const [result] = await Patient.aggregate<DemographicsRow>([DEMOGRAPHICS_FACET]);
+  return toDemographics(result);
+}
+
+/** Each starts with equality on `doctor`, so it reads only that doctor's slice of an index. */
+export function doctorAnalyticsPipelines(
+  doctor: Types.ObjectId,
+  firstDay: string,
+  timezone: string,
+) {
+  return {
+    conditions: [
+      { $match: { doctor } },
+      INDEX_ORDER.conditionRank,
+      { $group: { _id: "$conditionRank", patients: { $sum: 1 } } },
+    ],
+    monthly: byLocalDay({ doctor }, firstDay, timezone),
+    demographics: [{ $match: { doctor } }, DEMOGRAPHICS_FACET],
+  } satisfies Record<string, PipelineStage[]>;
+}
+
+export async function getDoctorAnalytics(id: string, timezone: string) {
+  const doctor = new Types.ObjectId(id);
+  const { labels, firstDay } = calendar("12m", "month", timezone);
+  const pipelines = doctorAnalyticsPipelines(doctor, firstDay, timezone);
+
+  const [exists, conditionRows, monthlyRows, [demographics]] = await Promise.all([
+    Doctor.exists({ _id: doctor }),
+    Patient.aggregate<{ _id: number; patients: number }>(pipelines.conditions),
+    Patient.aggregate<DayRow>(pipelines.monthly),
+    Patient.aggregate<DemographicsRow>(pipelines.demographics),
+  ]);
+  if (!exists) throw notFound("Doctor");
+
+  const monthly = onLabels(monthlyRows, labels, firstDay);
+  return {
+    conditions: countsByCondition(new Map(conditionRows.map((row) => [row._id, row.patients]))),
+    monthly: labels.map((month) => ({ month, patients: monthly.get(month) ?? 0 })),
+    ...toDemographics(demographics),
   };
 }
