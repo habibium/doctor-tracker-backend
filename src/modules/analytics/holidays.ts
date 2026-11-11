@@ -40,10 +40,8 @@ export const HOLIDAYS: readonly Holiday[] = [
   { name: "Christmas Day", start: "2026-12-25", end: "2026-12-25" },
 ];
 
-/** Holidays that overlap the inclusive range of calendar days. */
 export const holidaysBetween = (first: string, last: string) =>
   HOLIDAYS.filter((holiday) => holiday.end >= first && holiday.start <= last);
 
-/** The holiday covering a Dhaka calendar day, if any. */
 export const holidayOn = (day: string) =>
   HOLIDAYS.find((holiday) => holiday.start <= day && day <= holiday.end);
