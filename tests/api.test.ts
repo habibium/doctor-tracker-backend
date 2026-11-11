@@ -4,28 +4,9 @@ import { SORTS } from "../src/lib/query.ts";
 import { Patient } from "../src/modules/patients/patient.model.ts";
 import { buildOpenApiDocument } from "../src/openapi/document.ts";
 import { routes } from "../src/routes.ts";
-import { startTestApp } from "./helpers.ts";
+import { doctorInput, patientInput, startTestApp, type TestApp } from "./helpers.ts";
 
-let ctx: Awaited<ReturnType<typeof startTestApp>>;
-
-const doctorInput = (overrides: Record<string, unknown> = {}) => ({
-  name: "Ayesha Rahman",
-  specialization: "Cardiology",
-  hospital: "Square Hospital",
-  phone: "+8801711123456",
-  email: "ayesha.rahman@example.com",
-  ...overrides,
-});
-
-const patientInput = (overrides: Record<string, unknown> = {}) => ({
-  name: "Karim Uddin",
-  age: 52,
-  gender: "male",
-  phone: "01811222333",
-  condition: "stable",
-  diagnosis: "Hypertension",
-  ...overrides,
-});
+let ctx: TestApp;
 
 beforeAll(async () => {
   ctx = await startTestApp();

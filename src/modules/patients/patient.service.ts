@@ -2,7 +2,14 @@ import type { Types } from "mongoose";
 import { notFound } from "../../lib/errors.ts";
 import { countMatching, dateRange, page, SORTS } from "../../lib/query.ts";
 import { searchFilter } from "../../lib/search.ts";
-import { Doctor, type DoctorAttrs } from "../doctors/doctor.model.ts";
+import { Doctor } from "../doctors/doctor.model.ts";
+import {
+  decrementPatientCount,
+  DOCTOR_SUMMARY,
+  type DoctorSummary,
+  findDoctorSummary,
+  incrementPatientCount,
+} from "../doctors/doctor.service.ts";
 import { Patient, type PatientAttrs } from "./patient.model.ts";
 import type {
   ListPatientsQuery,
@@ -10,12 +17,6 @@ import type {
   PatientFields,
   UpdatePatientBody,
 } from "./patient.schema.ts";
-
-const DOCTOR_SUMMARY = "name specialization hospital";
-
-type DoctorSummary = Pick<DoctorAttrs, "name" | "specialization" | "hospital"> & {
-  _id: Types.ObjectId;
-};
 
 type PatientRecord = Omit<PatientAttrs, "searchTokens" | "doctor"> & { _id: Types.ObjectId };
 
@@ -37,12 +38,6 @@ function toDto(doc: PatientRecord, doctor: DoctorSummary | null): PatientDto {
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
-}
-
-async function findDoctorSummary(doctorId: string | Types.ObjectId) {
-  const doctor = await Doctor.findById(doctorId).select(DOCTOR_SUMMARY).lean();
-  if (!doctor) throw notFound("Doctor");
-  return doctor;
 }
 
 export async function listPatients(query: ListPatientsQuery) {
@@ -85,31 +80,48 @@ export async function getPatient(id: string) {
   return toDto(doc, doc.doctor);
 }
 
+// Each write changes the patient and the affected patientCount in one transaction. Concurrent
+// writes for one doctor conflict on its document, so that write goes last to keep the window short.
+
 export async function createPatient(doctorId: string, fields: PatientFields) {
-  const doctor = await findDoctorSummary(doctorId);
-  const doc = await Patient.create({ ...fields, doctor: doctor._id });
-  return toDto(doc, doctor);
+  return Patient.db.transaction(async (session) => {
+    const doc = await new Patient({ ...fields, doctor: doctorId }).save({ session });
+    return toDto(doc, await incrementPatientCount(doctorId, session));
+  });
 }
 
 export async function updatePatient(id: string, { doctorId, ...changes }: UpdatePatientBody) {
-  const doc = await Patient.findById(id);
-  if (!doc) throw notFound("Patient");
+  return Patient.db.transaction(async (session) => {
+    const doc = await Patient.findById(id).session(session);
+    if (!doc) throw notFound("Patient");
 
-  const doctor = await findDoctorSummary(doctorId ?? doc.doctor);
-  // save() rather than updateOne() so the pre-save hook rebuilds the search tokens.
-  doc.set({ ...changes, doctor: doctor._id });
-  await doc.save();
-  return toDto(doc, doctor);
+    const previous = doc.doctor;
+    const moving = doctorId !== undefined && !previous.equals(doctorId);
+    // save() rather than updateOne() so the pre-save hook rebuilds the search tokens.
+    doc.set({ ...changes, ...(moving && { doctor: doctorId }) });
+    await doc.save({ session });
+
+    if (!moving) return toDto(doc, await findDoctorSummary(previous, session));
+    await decrementPatientCount(previous, session);
+    return toDto(doc, await incrementPatientCount(doctorId, session));
+  });
 }
 
 export async function deletePatient(id: string) {
-  const deleted = await Patient.findByIdAndDelete(id).select("_id").lean();
-  if (!deleted) throw notFound("Patient");
+  await removePatient({ _id: id });
 }
 
 export async function deleteDoctorPatient(doctorId: string, patientId: string) {
-  const deleted = await Patient.findOneAndDelete({ _id: patientId, doctor: doctorId })
-    .select("_id")
-    .lean();
-  if (!deleted) throw notFound("Patient");
+  await removePatient({ _id: patientId, doctor: doctorId });
+}
+
+async function removePatient(filter: { _id: string; doctor?: string }) {
+  await Patient.db.transaction(async (session) => {
+    const deleted = await Patient.findOneAndDelete(filter, {
+      session,
+      projection: "doctor",
+    }).lean();
+    if (!deleted) throw notFound("Patient");
+    await decrementPatientCount(deleted.doctor, session);
+  });
 }

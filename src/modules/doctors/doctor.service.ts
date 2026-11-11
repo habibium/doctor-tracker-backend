@@ -1,8 +1,7 @@
-import type { Types } from "mongoose";
+import type { ClientSession, Types } from "mongoose";
 import { conflict, notFound } from "../../lib/errors.ts";
 import { countMatching, dateRange, page, SORTS } from "../../lib/query.ts";
 import { searchFilter } from "../../lib/search.ts";
-import { Patient } from "../patients/patient.model.ts";
 import { Doctor, type DoctorAttrs } from "./doctor.model.ts";
 import type {
   DoctorDto,
@@ -11,9 +10,15 @@ import type {
   UpdateDoctorBody,
 } from "./doctor.schema.ts";
 
+export const DOCTOR_SUMMARY = "name specialization hospital";
+
 type DoctorRecord = Omit<DoctorAttrs, "searchTokens"> & { _id: Types.ObjectId };
 
-function toDto(doc: DoctorRecord, patientCount: number): DoctorDto {
+export type DoctorSummary = Pick<DoctorAttrs, "name" | "specialization" | "hospital"> & {
+  _id: Types.ObjectId;
+};
+
+function toDto(doc: DoctorRecord): DoctorDto {
   return {
     id: String(doc._id),
     name: doc.name,
@@ -21,20 +26,10 @@ function toDto(doc: DoctorRecord, patientCount: number): DoctorDto {
     hospital: doc.hospital,
     phone: doc.phone,
     email: doc.email,
-    patientCount,
+    patientCount: doc.patientCount,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
-}
-
-/** One indexed aggregation for the whole page instead of a count query per doctor. */
-async function patientCounts(doctorIds: Types.ObjectId[]) {
-  if (doctorIds.length === 0) return new Map<string, number>();
-  const rows = await Patient.aggregate<{ _id: Types.ObjectId; count: number }>([
-    { $match: { doctor: { $in: doctorIds } } },
-    { $group: { _id: "$doctor", count: { $sum: 1 } } },
-  ]);
-  return new Map(rows.map((row) => [String(row._id), row.count]));
 }
 
 export async function listDoctors(query: ListDoctorsQuery) {
@@ -55,12 +50,7 @@ export async function listDoctors(query: ListDoctorsQuery) {
     countMatching(Doctor, filter),
   ]);
 
-  const counts = await patientCounts(docs.map((doc) => doc._id));
-  return page(
-    docs.map((doc) => toDto(doc, counts.get(String(doc._id)) ?? 0)),
-    total,
-    query,
-  );
+  return page(docs.map(toDto), total, query);
 }
 
 export async function getDoctorFilters() {
@@ -72,17 +62,13 @@ export async function getDoctorFilters() {
 }
 
 export async function getDoctor(id: string) {
-  const [doc, patientCount] = await Promise.all([
-    Doctor.findById(id).lean(),
-    Patient.countDocuments({ doctor: id }),
-  ]);
+  const doc = await Doctor.findById(id).lean();
   if (!doc) throw notFound("Doctor");
-  return toDto(doc, patientCount);
+  return toDto(doc);
 }
 
 export async function createDoctor(fields: DoctorFields) {
-  const doc = await Doctor.create(fields);
-  return toDto(doc, 0);
+  return toDto(await Doctor.create(fields));
 }
 
 export async function updateDoctor(id: string, changes: UpdateDoctorBody) {
@@ -92,13 +78,42 @@ export async function updateDoctor(id: string, changes: UpdateDoctorBody) {
   // save() rather than updateOne() so the pre-save hook rebuilds the search tokens.
   doc.set(changes);
   await doc.save();
-  return toDto(doc, await Patient.countDocuments({ doctor: id }));
+  return toDto(doc);
 }
 
 export async function deleteDoctor(id: string) {
+  // One conditional delete: a concurrent patient create either finds the doctor gone
+  // (and aborts) or has already raised the count above zero.
+  const { deletedCount } = await Doctor.deleteOne({ _id: id, patientCount: 0 });
+  if (deletedCount === 1) return;
   if (!(await Doctor.exists({ _id: id }))) throw notFound("Doctor");
-  if (await Patient.exists({ doctor: id })) {
-    throw conflict("This doctor still has patients. Reassign or remove them first.");
-  }
-  await Doctor.deleteOne({ _id: id });
+  throw conflict("This doctor still has patients. Reassign or remove them first.");
+}
+
+/** Runs inside the transaction that writes the patient; a 404 here aborts it. */
+export async function incrementPatientCount(
+  doctorId: string | Types.ObjectId,
+  session: ClientSession,
+): Promise<DoctorSummary> {
+  const doctor = await Doctor.findByIdAndUpdate(
+    doctorId,
+    { $inc: { patientCount: 1 } },
+    { session, projection: DOCTOR_SUMMARY },
+  ).lean();
+  if (!doctor) throw notFound("Doctor");
+  return doctor;
+}
+
+/** A missing doctor is ignored, so a patient left without one can still be moved or removed. */
+export async function decrementPatientCount(doctorId: Types.ObjectId, session: ClientSession) {
+  await Doctor.updateOne({ _id: doctorId }, { $inc: { patientCount: -1 } }, { session });
+}
+
+export async function findDoctorSummary(
+  doctorId: string | Types.ObjectId,
+  session?: ClientSession,
+): Promise<DoctorSummary> {
+  const doctor = await Doctor.findById(doctorId, DOCTOR_SUMMARY, { session }).lean();
+  if (!doctor) throw notFound("Doctor");
+  return doctor;
 }

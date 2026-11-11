@@ -7,6 +7,27 @@ import { connectDatabase, disconnectDatabase, ensureIndexes } from "../src/db/co
 
 const PASSWORD = "Password@123";
 
+export type TestApp = Awaited<ReturnType<typeof startTestApp>>;
+
+export const doctorInput = (overrides: Record<string, unknown> = {}) => ({
+  name: "Ayesha Rahman",
+  specialization: "Cardiology",
+  hospital: "Square Hospital",
+  phone: "+8801711123456",
+  email: "ayesha.rahman@example.com",
+  ...overrides,
+});
+
+export const patientInput = (overrides: Record<string, unknown> = {}) => ({
+  name: "Karim Uddin",
+  age: 52,
+  gender: "male",
+  phone: "01811222333",
+  condition: "stable",
+  diagnosis: "Hypertension",
+  ...overrides,
+});
+
 export async function startTestApp() {
   const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   const connection = await connectDatabase(mongo.getUri("doctor-tracker-test"));

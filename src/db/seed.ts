@@ -180,8 +180,15 @@ if (!fresh && (await Doctor.estimatedDocumentCount()) > 0) {
   const doctors = buildDoctors(now);
   const patients = buildPatients(doctors, now);
 
+  const patientCounts = new Map<Types.ObjectId, number>();
+  for (const patient of patients) {
+    patientCounts.set(patient.doctor, (patientCounts.get(patient.doctor) ?? 0) + 1);
+  }
+
   // The native driver keeps the backdated timestamps that Mongoose would overwrite.
-  await Doctor.collection.insertMany(doctors.map((item) => item.doctor));
+  await Doctor.collection.insertMany(
+    doctors.map(({ doctor }) => ({ ...doctor, patientCount: patientCounts.get(doctor._id) ?? 0 })),
+  );
   for (let start = 0; start < patients.length; start += 5_000) {
     await Patient.collection.insertMany(patients.slice(start, start + 5_000));
   }
