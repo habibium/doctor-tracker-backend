@@ -10,7 +10,13 @@ import {
   findDoctorSummary,
   incrementPatientCount,
 } from "../doctors/doctor.service.ts";
-import { CONDITION_RANK, Patient, PATIENT_SORTS, type PatientAttrs } from "./patient.model.ts";
+import {
+  CONDITION_RANK,
+  DOCTOR_INDEXES,
+  Patient,
+  PATIENT_SORTS,
+  type PatientAttrs,
+} from "./patient.model.ts";
 import type {
   ListPatientsQuery,
   PatientDto,
@@ -42,6 +48,15 @@ function toDto(doc: PatientRecord, doctor: DoctorSummary | null): PatientDto {
   };
 }
 
+/**
+ * Keeps one doctor's list inside that doctor's index range. Left to the planner, a name plan
+ * cached for a busy doctor would walk the whole name index for a quiet one until it replans.
+ */
+function doctorIndexFor(query: ListPatientsQuery) {
+  const byCondition = query.condition !== undefined || query.sort.endsWith("condition");
+  return byCondition ? DOCTOR_INDEXES.byCondition : DOCTOR_INDEXES.byDate;
+}
+
 export async function listPatients(query: ListPatientsQuery) {
   const createdAt = dateRange(query.from, query.to);
   const filter = {
@@ -52,13 +67,14 @@ export async function listPatients(query: ListPatientsQuery) {
     ...(createdAt && { createdAt }),
   };
 
+  const find = Patient.find(filter)
+    .sort(sortSpec(PATIENT_SORTS, query.sort))
+    .skip((query.page - 1) * query.limit)
+    .limit(query.limit);
+  if (query.doctorId) find.hint(doctorIndexFor(query));
+
   const [docs, total] = await Promise.all([
-    Patient.find(filter)
-      .sort(sortSpec(PATIENT_SORTS, query.sort))
-      .skip((query.page - 1) * query.limit)
-      .limit(query.limit)
-      .populate<{ doctor: DoctorSummary | null }>("doctor", DOCTOR_SUMMARY)
-      .lean(),
+    find.populate<{ doctor: DoctorSummary | null }>("doctor", DOCTOR_SUMMARY).lean(),
     countMatching(Patient, filter),
   ]);
 

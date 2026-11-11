@@ -21,7 +21,6 @@ const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, "12m"
  * (a covered scan, zero documents read) instead of scanning the whole collection.
  */
 const INDEX_ORDER = {
-  doctor: { $sort: { doctor: 1 } },
   conditionRank: { $sort: { conditionRank: 1 } },
   doctorAndCondition: { $sort: { doctor: 1, conditionRank: 1 } },
 } satisfies Record<string, PipelineStage>;
@@ -207,9 +206,24 @@ export async function getPatientsPerDoctor(limit: number, condition?: PatientCon
     _id: Types.ObjectId;
     patients: number;
     doctor: { name: string; specialization: string; hospital: string };
-  }>([
-    { $match: { conditionRank: CONDITION_RANK[condition] } },
-    INDEX_ORDER.doctor,
+  }>(conditionRankingPipeline(condition, limit));
+
+  return rows.map((row) => ({
+    doctorId: String(row._id),
+    name: row.doctor.name,
+    specialization: row.doctor.specialization,
+    hospital: row.doctor.hospital,
+    patients: row.patients,
+  }));
+}
+
+/** Doctors ranked by patients in one condition; exported so tests can check its plan. */
+export function conditionRankingPipeline(condition: PatientCondition, limit: number) {
+  return [
+    // Every `doctor` is an ObjectId. Saying so bounds the leading key of the doctor, conditionRank
+    // index, so the scan seeks to each doctor's slice of this condition and never fetches.
+    { $match: { doctor: { $type: "objectId" }, conditionRank: CONDITION_RANK[condition] } },
+    INDEX_ORDER.doctorAndCondition,
     { $group: { _id: "$doctor", patients: { $sum: 1 } } },
     { $sort: { patients: -1, _id: 1 } },
     { $limit: limit },
@@ -224,15 +238,7 @@ export async function getPatientsPerDoctor(limit: number, condition?: PatientCon
       },
     },
     { $unwind: "$doctor" },
-  ]);
-
-  return rows.map((row) => ({
-    doctorId: String(row._id),
-    name: row.doctor.name,
-    specialization: row.doctor.specialization,
-    hospital: row.doctor.hospital,
-    patients: row.patients,
-  }));
+  ] satisfies PipelineStage[];
 }
 
 export async function getConditionBreakdown() {

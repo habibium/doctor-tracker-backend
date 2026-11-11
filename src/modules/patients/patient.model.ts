@@ -56,10 +56,16 @@ const patientSchema = new Schema<PatientAttrs>(
   { timestamps: true },
 );
 
+/** The two indexes that lead with `doctor`; one doctor's patient list is pinned to them. */
+export const DOCTOR_INDEXES = {
+  byDate: { doctor: 1, createdAt: -1, _id: -1 },
+  // Also covers per-doctor condition counts, which read only its first two keys.
+  byCondition: { doctor: 1, conditionRank: 1, createdAt: -1, _id: -1 },
+} as const;
+
 patientSchema.index({ createdAt: -1, _id: -1 });
-patientSchema.index({ doctor: 1, createdAt: -1, _id: -1 });
-// Also covers per-doctor condition counts, which read only these two keys.
-patientSchema.index({ doctor: 1, conditionRank: 1, createdAt: -1, _id: -1 });
+patientSchema.index(DOCTOR_INDEXES.byDate);
+patientSchema.index(DOCTOR_INDEXES.byCondition);
 patientSchema.index({ conditionRank: 1, createdAt: -1, _id: -1 });
 patientSchema.index({ name: 1, _id: 1 });
 patientSchema.index({ age: 1, createdAt: -1, _id: -1 });

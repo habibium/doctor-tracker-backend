@@ -88,6 +88,17 @@ describe("patient sorting", () => {
     expect(names(res.body)).toEqual(["Pia", "Rafi"]);
   });
 
+  it.each([
+    ["sort=-age", ["Rafi", "Pia"]],
+    ["sort=name", ["Pia", "Rafi"]],
+    ["sort=age&condition=critical", ["Pia"]],
+    ["sort=-condition&search=rafi", ["Rafi"]],
+    ["sort=createdAt&gender=male", ["Pia", "Rafi"]],
+  ])("filters and sorts one doctor's patients with %s", async (params, expected) => {
+    const res = await ctx.admin.get(`/api/v1/doctors/${doctors.B}/patients?${params}`).expect(200);
+    expect(names(res.body)).toEqual(expected);
+  });
+
   it("rejects a doctor-only sort key", async () => {
     await ctx.admin.get("/api/v1/patients?sort=patientCount").expect(400);
   });

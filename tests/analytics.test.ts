@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   bucketLayout,
   conditionMixPipeline,
+  conditionRankingPipeline,
   doctorAnalyticsPipelines,
 } from "../src/modules/analytics/analytics.service.ts";
 import { Patient } from "../src/modules/patients/patient.model.ts";
@@ -277,6 +278,16 @@ describe("patients per doctor", () => {
     expect(stable.body).toEqual([expect.objectContaining({ name: "Dr X", patients: 1 })]);
 
     await ctx.admin.get("/api/v1/analytics/patients-per-doctor?condition=fine").expect(400);
+  });
+
+  it("ranks by condition from the index alone", async () => {
+    const explained = await Patient.aggregate(conditionRankingPipeline("critical", 10)).explain(
+      "executionStats",
+    );
+    const scan = planNodes(explained).find((node) => node.stage === "IXSCAN");
+    expect(scan?.indexName).toBe("doctor_1_conditionRank_1_createdAt_-1__id_-1");
+    expect(scan?.indexBounds).toMatchObject({ conditionRank: ["[4, 4]"] });
+    expect(docsExamined(explained)).toBe(0);
   });
 });
 

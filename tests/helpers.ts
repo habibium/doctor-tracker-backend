@@ -46,8 +46,13 @@ export function planNodes(explain: unknown): PlanNode[] {
 
 export const planStages = (explain: unknown) => planNodes(explain).map((node) => node.stage);
 
-export const docsExamined = (explain: unknown) =>
-  (explain as { executionStats: { totalDocsExamined: number } }).executionStats.totalDocsExamined;
+type ExecutionStats = { executionStats?: { totalDocsExamined: number } };
+
+/** Documents read by the query itself; a later $lookup is not pushed down and reports apart. */
+export function docsExamined(explain: unknown) {
+  const root = explain as ExecutionStats & { stages?: { $cursor?: ExecutionStats }[] };
+  return (root.executionStats ?? root.stages?.[0]?.$cursor?.executionStats)?.totalDocsExamined;
+}
 
 export async function startTestApp() {
   const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
